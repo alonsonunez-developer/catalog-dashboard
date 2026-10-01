@@ -4,11 +4,18 @@ import { supabase } from './supabase'
 
 export type Role = 'admin' | 'editor' | 'viewer'
 
+export interface AttributeDef {
+  key: string
+  label: string
+  type: 'text' | 'list'
+}
+
 export interface Organization {
   id: string
   name: string
   currency: string
   business: Record<string, string>
+  attribute_defs: AttributeDef[]
 }
 
 export const session = ref<Session | null>(null)
@@ -22,12 +29,14 @@ export const isAdmin = computed(() => role.value === 'admin')
 export async function loadOrganization(userId: string) {
   const { data, error } = await supabase
     .from('organization_members')
-    .select('role, organizations(id, name, currency, business)')
+    .select('role, organizations(id, name, currency, business, attribute_defs)')
     .eq('user_id', userId) // sin este filtro se verían también las membresías de otros usuarios
     .limit(1)
   if (error) throw error
   const row = data?.[0] as unknown as { role: Role; organizations: Organization } | undefined
-  organization.value = row?.organizations ?? null
+  organization.value = row?.organizations
+    ? { ...row.organizations, attribute_defs: row.organizations.attribute_defs ?? [] }
+    : null
   role.value = row?.role ?? null
 }
 

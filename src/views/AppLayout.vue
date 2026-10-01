@@ -9,6 +9,7 @@ const links = [
   { name: 'catalogs', label: 'Catálogos' },
   { name: 'products', label: 'Productos' },
   { name: 'categories', label: 'Categorías' },
+  { name: 'attributes', label: 'Atributos' },
   { name: 'settings', label: 'Negocio' },
 ]
 

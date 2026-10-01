@@ -15,6 +15,7 @@ const router = createRouter({
         { path: 'catalogs/:id', name: 'catalog-editor', component: () => import('./views/CatalogEditorView.vue') },
         { path: 'products', name: 'products', component: () => import('./views/ProductsView.vue') },
         { path: 'categories', name: 'categories', component: () => import('./views/CategoriesView.vue') },
+        { path: 'attributes', name: 'attributes', component: () => import('./views/AttributesView.vue') },
         { path: 'settings', name: 'settings', component: () => import('./views/SettingsView.vue') },
       ],
     },

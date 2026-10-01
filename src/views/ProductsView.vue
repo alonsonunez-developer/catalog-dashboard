@@ -2,10 +2,18 @@
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { supabase } from '../lib/supabase'
 import { canEdit, organization } from '../lib/session'
-import { errorMessage, fetchCategories, fetchProducts, type Category, type Product } from '../lib/data'
+import {
+  errorMessage,
+  fetchCategories,
+  fetchProducts,
+  type AttributeValue,
+  type Category,
+  type Product,
+} from '../lib/data'
 import { ACCEPT_ATTR, deleteStoredImage, uploadProductImage, validateImage } from '../lib/storage'
 
 const orgId = () => organization.value!.id
+const defs = computed(() => organization.value!.attribute_defs ?? [])
 const products = ref<Product[]>([])
 const categories = ref<Category[]>([])
 const loading = ref(true)
@@ -17,12 +25,18 @@ const emptyForm = () => ({
   id: null as string | null,
   name: '',
   price: 0,
+  compare_at_price: '' as number | '',
+  sku: '',
   description: '',
   image_url: '',
   originalImage: '' as string,
   file: null as File | null,
   category_id: '',
   is_active: true,
+  // Valores de los atributos definidos; las listas se escriben separadas por comas
+  attrs: Object.fromEntries(defs.value.map((d) => [d.key, ''])) as Record<string, string>,
+  // Valores de atributos que ya no están definidos: se conservan tal cual
+  extraAttributes: {} as Record<string, AttributeValue>,
 })
 const form = ref(emptyForm())
 
@@ -82,16 +96,28 @@ function create() {
 
 function edit(p: Product) {
   clearObjectUrl()
+  const known = new Set(defs.value.map((d) => d.key))
+  const attrs: Record<string, string> = {}
+  const extra: Record<string, AttributeValue> = {}
+  for (const d of defs.value) {
+    const v = p.attributes[d.key]
+    attrs[d.key] = Array.isArray(v) ? v.join(', ') : (v ?? '')
+  }
+  for (const [k, v] of Object.entries(p.attributes)) if (!known.has(k)) extra[k] = v
   form.value = {
     id: p.id,
     name: p.name,
     price: p.price,
+    compare_at_price: p.compare_at_price ?? '',
+    sku: p.sku ?? '',
     description: p.description ?? '',
     image_url: p.image_url ?? '',
     originalImage: p.image_url ?? '',
     file: null,
     category_id: p.category_id ?? '',
     is_active: p.is_active,
+    attrs,
+    extraAttributes: extra,
   }
   showForm.value = true
 }
@@ -101,10 +127,27 @@ function cancel() {
   showForm.value = false
 }
 
+function buildAttributes(): Record<string, AttributeValue> {
+  const f = form.value
+  const out: Record<string, AttributeValue> = { ...f.extraAttributes }
+  for (const d of defs.value) {
+    const raw = (f.attrs[d.key] ?? '').trim()
+    if (!raw) continue
+    out[d.key] = d.type === 'list' ? raw.split(',').map((s) => s.trim()).filter(Boolean) : raw
+  }
+  return out
+}
+
 async function save() {
-  saving.value = true
   error.value = ''
   const f = form.value
+  const compareAt = f.compare_at_price === '' || f.compare_at_price == null ? null : Number(f.compare_at_price)
+  if (compareAt !== null && compareAt < f.price) {
+    error.value = 'El precio anterior debe ser mayor o igual al precio actual (o déjalo vacío).'
+    return
+  }
+
+  saving.value = true
   let uploadedUrl: string | null = null
   try {
     if (f.file) uploadedUrl = await uploadProductImage(orgId(), f.file)
@@ -112,10 +155,13 @@ async function save() {
     const payload = {
       name: f.name.trim(),
       price: f.price,
+      compare_at_price: compareAt,
+      sku: f.sku.trim() || null,
       description: f.description.trim() || null,
       image_url: imageUrl,
       category_id: f.category_id || null,
       is_active: f.is_active,
+      attributes: buildAttributes(),
     }
     const { error: e } = f.id
       ? await supabase.from('products').update(payload).eq('id', f.id)
@@ -162,8 +208,16 @@ async function remove(p: Product) {
         <input id="p-name" v-model="form.name" class="input" required maxlength="200" />
       </div>
       <div>
+        <label class="label" for="p-sku">Código (SKU)</label>
+        <input id="p-sku" v-model="form.sku" class="input" maxlength="60" />
+      </div>
+      <div>
         <label class="label" for="p-price">Precio ({{ organization?.currency }})</label>
         <input id="p-price" v-model.number="form.price" type="number" step="0.01" min="0" class="input" required />
+      </div>
+      <div>
+        <label class="label" for="p-compare">Precio anterior (opcional, se muestra tachado)</label>
+        <input id="p-compare" v-model.number="form.compare_at_price" type="number" step="0.01" min="0" class="input" />
       </div>
       <div>
         <label class="label" for="p-cat">Categoría</label>
@@ -194,6 +248,24 @@ async function remove(p: Product) {
         <label class="label" for="p-desc">Descripción</label>
         <textarea id="p-desc" v-model="form.description" rows="2" class="input" />
       </div>
+
+      <fieldset class="grid gap-3 rounded-md border border-neutral-200 p-3 md:col-span-2 md:grid-cols-2">
+        <legend class="px-1 text-sm font-medium text-neutral-700">Atributos</legend>
+        <p v-if="!defs.length" class="text-sm text-neutral-500 md:col-span-2">
+          Aún no definiste atributos (tallas, colores, sabores…).
+          <RouterLink :to="{ name: 'attributes' }" class="underline">Definirlos</RouterLink>
+        </p>
+        <div v-for="d in defs" :key="d.key">
+          <label class="label" :for="`a-${d.key}`">{{ d.label }}</label>
+          <input
+            :id="`a-${d.key}`"
+            v-model="form.attrs[d.key]"
+            class="input"
+            :placeholder="d.type === 'list' ? 'Separados por comas: S, M, L' : ''"
+          />
+        </div>
+      </fieldset>
+
       <label class="flex items-center gap-2 text-sm md:col-span-2">
         <input v-model="form.is_active" type="checkbox" /> Visible en el catálogo
       </label>
@@ -210,6 +282,7 @@ async function remove(p: Product) {
         <thead class="border-b bg-neutral-50 text-neutral-600">
           <tr>
             <th class="px-3 py-2">Producto</th>
+            <th class="px-3 py-2">Código</th>
             <th class="px-3 py-2">Categoría</th>
             <th class="px-3 py-2">Precio</th>
             <th class="px-3 py-2">Estado</th>
@@ -224,8 +297,12 @@ async function remove(p: Product) {
                 <span class="font-medium">{{ p.name }}</span>
               </div>
             </td>
+            <td class="px-3 py-2">{{ p.sku ?? '—' }}</td>
             <td class="px-3 py-2">{{ p.category_id ? categoryName.get(p.category_id) : '—' }}</td>
-            <td class="px-3 py-2">{{ fmt.format(p.price) }}</td>
+            <td class="px-3 py-2">
+              {{ fmt.format(p.price) }}
+              <s v-if="p.compare_at_price" class="ml-1 text-xs text-neutral-400">{{ fmt.format(p.compare_at_price) }}</s>
+            </td>
             <td class="px-3 py-2">{{ p.is_active ? 'Visible' : 'Oculto' }}</td>
             <td class="space-x-2 px-3 py-2 text-right">
               <template v-if="canEdit">
