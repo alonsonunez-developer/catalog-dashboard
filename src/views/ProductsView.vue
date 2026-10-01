@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { supabase } from '../lib/supabase'
 import { canEdit, organization } from '../lib/session'
 import { errorMessage, fetchCategories, fetchProducts, type Category, type Product } from '../lib/data'
+import { ACCEPT_ATTR, deleteStoredImage, uploadProductImage, validateImage } from '../lib/storage'
 
 const orgId = () => organization.value!.id
 const products = ref<Product[]>([])
@@ -18,10 +19,44 @@ const emptyForm = () => ({
   price: 0,
   description: '',
   image_url: '',
+  originalImage: '' as string,
+  file: null as File | null,
   category_id: '',
   is_active: true,
 })
 const form = ref(emptyForm())
+
+// Vista previa: el archivo elegido (aún sin subir) o la imagen actual
+const objectUrl = ref('')
+const preview = computed(() => objectUrl.value || form.value.image_url)
+
+function clearObjectUrl() {
+  if (objectUrl.value) URL.revokeObjectURL(objectUrl.value)
+  objectUrl.value = ''
+}
+onBeforeUnmount(clearObjectUrl)
+
+function onFile(ev: Event) {
+  const input = ev.target as HTMLInputElement
+  const file = input.files?.[0]
+  input.value = ''
+  if (!file) return
+  const invalid = validateImage(file)
+  if (invalid) {
+    error.value = invalid
+    return
+  }
+  error.value = ''
+  clearObjectUrl()
+  objectUrl.value = URL.createObjectURL(file)
+  form.value.file = file
+}
+
+function removeImage() {
+  clearObjectUrl()
+  form.value.file = null
+  form.value.image_url = ''
+}
 
 const categoryName = computed(() => new Map(categories.value.map((c) => [c.id, c.name])))
 const fmt = computed(
@@ -40,52 +75,75 @@ async function load() {
 onMounted(load)
 
 function create() {
+  clearObjectUrl()
   form.value = emptyForm()
   showForm.value = true
 }
 
 function edit(p: Product) {
+  clearObjectUrl()
   form.value = {
     id: p.id,
     name: p.name,
     price: p.price,
     description: p.description ?? '',
     image_url: p.image_url ?? '',
+    originalImage: p.image_url ?? '',
+    file: null,
     category_id: p.category_id ?? '',
     is_active: p.is_active,
   }
   showForm.value = true
 }
 
+function cancel() {
+  clearObjectUrl()
+  showForm.value = false
+}
+
 async function save() {
   saving.value = true
   error.value = ''
   const f = form.value
-  const payload = {
-    name: f.name.trim(),
-    price: f.price,
-    description: f.description.trim() || null,
-    image_url: f.image_url.trim() || null,
-    category_id: f.category_id || null,
-    is_active: f.is_active,
-  }
-  const { error: e } = f.id
-    ? await supabase.from('products').update(payload).eq('id', f.id)
-    : await supabase.from('products').insert({ ...payload, organization_id: orgId() })
-  saving.value = false
-  if (e) {
+  let uploadedUrl: string | null = null
+  try {
+    if (f.file) uploadedUrl = await uploadProductImage(orgId(), f.file)
+    const imageUrl = uploadedUrl ?? (f.image_url.trim() || null)
+    const payload = {
+      name: f.name.trim(),
+      price: f.price,
+      description: f.description.trim() || null,
+      image_url: imageUrl,
+      category_id: f.category_id || null,
+      is_active: f.is_active,
+    }
+    const { error: e } = f.id
+      ? await supabase.from('products').update(payload).eq('id', f.id)
+      : await supabase.from('products').insert({ ...payload, organization_id: orgId() })
+    if (e) throw e
+    // Se borra la imagen anterior solo después de guardar bien
+    if (f.originalImage && f.originalImage !== imageUrl) await deleteStoredImage(f.originalImage)
+    clearObjectUrl()
+    showForm.value = false
+    await load()
+  } catch (e) {
     error.value = errorMessage(e)
-    return
+    // Si la imagen nueva se subió pero el producto no se guardó, se limpia
+    if (uploadedUrl) await deleteStoredImage(uploadedUrl)
+  } finally {
+    saving.value = false
   }
-  showForm.value = false
-  await load()
 }
 
 async function remove(p: Product) {
   if (!confirm(`¿Eliminar "${p.name}"?`)) return
   error.value = ''
   const { error: e } = await supabase.from('products').delete().eq('id', p.id)
-  if (e) error.value = errorMessage(e)
+  if (e) {
+    error.value = errorMessage(e)
+    return
+  }
+  await deleteStoredImage(p.image_url)
   await load()
 }
 </script>
@@ -114,10 +172,24 @@ async function remove(p: Product) {
           <option v-for="c in categories" :key="c.id" :value="c.id">{{ c.name }}</option>
         </select>
       </div>
+
       <div>
-        <label class="label" for="p-img">URL de la imagen</label>
-        <input id="p-img" v-model="form.image_url" type="url" class="input" placeholder="https://…" />
+        <label class="label" for="p-file">Imagen</label>
+        <div class="flex items-center gap-3">
+          <img v-if="preview" :src="preview" alt="" class="h-16 w-16 rounded object-cover" />
+          <div v-else class="flex h-16 w-16 items-center justify-center rounded bg-neutral-100 text-xs text-neutral-400">
+            Sin foto
+          </div>
+          <div class="space-y-1">
+            <input id="p-file" type="file" :accept="ACCEPT_ATTR" class="block text-sm" @change="onFile" />
+            <button v-if="preview" type="button" class="text-xs text-red-700 underline" @click="removeImage">
+              Quitar imagen
+            </button>
+          </div>
+        </div>
+        <p class="mt-1 text-xs text-neutral-500">JPG, PNG o WebP. Se optimiza automáticamente al guardar.</p>
       </div>
+
       <div class="md:col-span-2">
         <label class="label" for="p-desc">Descripción</label>
         <textarea id="p-desc" v-model="form.description" rows="2" class="input" />
@@ -127,7 +199,7 @@ async function remove(p: Product) {
       </label>
       <div class="flex gap-2 md:col-span-2">
         <button class="btn btn-primary" :disabled="saving">{{ saving ? 'Guardando…' : 'Guardar' }}</button>
-        <button type="button" class="btn btn-secondary" @click="showForm = false">Cancelar</button>
+        <button type="button" class="btn btn-secondary" :disabled="saving" @click="cancel">Cancelar</button>
       </div>
     </form>
 
