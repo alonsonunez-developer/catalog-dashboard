@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { useRoute } from 'vue-router'
-import { PageRenderer, PageSchema, builtinComponents, themes } from 'catalog-kit'
+import { PageRenderer, PageSchema, builtinComponents, pageEntries, themes } from 'catalog-kit'
 import { supabase } from '../lib/supabase'
 import { canEdit, organization } from '../lib/session'
 import { errorMessage, fetchCategories, fetchProducts, toRendererData } from '../lib/data'
@@ -80,7 +80,7 @@ const sectionProblems = computed(() => {
   if (!r.success) return []
   const out: string[] = []
   const seen = new Set<string>()
-  for (const s of r.data.sections) {
+  for (const s of pageEntries(r.data)) {
     if (seen.has(s.id)) out.push(`El id "${s.id}" está repetido.`)
     seen.add(s.id)
     const def = builtinComponents.find((c) => c.name === s.type)
