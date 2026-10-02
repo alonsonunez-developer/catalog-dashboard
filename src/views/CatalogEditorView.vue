@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
-import { useRoute } from 'vue-router'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { onBeforeRouteLeave, useRoute } from 'vue-router'
 import {
   PageRenderer,
   PageSchema,
@@ -22,6 +22,7 @@ import { supabase } from '../lib/supabase'
 import { canEdit, organization } from '../lib/session'
 import { errorMessage, fetchCategories, fetchProducts, toRendererData, type Product } from '../lib/data'
 import ShareCard from '../components/ShareCard.vue'
+import { useTextHistory } from '../lib/useHistory'
 import { ACCEPT_ATTR, uploadImage, validateImage } from '../lib/storage'
 
 type PageV2 = Extract<Page, { version: 2 }>
@@ -56,6 +57,7 @@ const slug = ref('')
 const status = ref<'draft' | 'published'>('draft')
 const text = ref('')
 const lastSavedText = ref('')
+const { canUndo, canRedo, undo, redo, reset: resetHistory } = useTextHistory(text)
 const savedDraft = ref<unknown>(null)
 const published = ref<unknown>(null)
 const rendererData = ref<ReturnType<typeof toRendererData> | null>(null)
@@ -87,6 +89,8 @@ async function loadCatalog() {
 }
 
 onMounted(async () => {
+  window.addEventListener('keydown', onKey)
+  window.addEventListener('beforeunload', onBeforeUnload)
   try {
     const org = organization.value!
     const [catalog, categories, products] = await Promise.all([
@@ -96,6 +100,7 @@ onMounted(async () => {
     ])
     text.value = JSON.stringify(catalog.draft_page, null, 2)
     lastSavedText.value = text.value
+    resetHistory()
     allProducts.value = products
     rendererData.value = toRendererData(org, categories, products)
   } catch (e) {
@@ -305,30 +310,115 @@ function onAddMissing() {
 }
 
 // ===== Guardar y publicar =====
-async function saveDraft(): Promise<boolean> {
-  error.value = ''
-  notice.value = ''
+const autosave = ref(true)
+const autosaveError = ref('')
+const lastSavedAt = ref<Date | null>(null)
+
+// silent = true para el autoguardado: no toca los mensajes de la pantalla
+async function saveDraft(silent = false): Promise<boolean> {
+  if (!silent) {
+    error.value = ''
+    notice.value = ''
+  }
   if (structureError.value) {
-    error.value = structureError.value
+    if (!silent) error.value = structureError.value
     return false
   }
+  // Se guarda una copia fija: si el usuario sigue escribiendo, esos cambios quedan pendientes
+  const snapshot = text.value
+  const payload = page.value
   saving.value = true
   const { data, error: e } = await supabase
     .from('catalogs')
-    .update({ draft_page: page.value })
+    .update({ draft_page: payload })
     .eq('id', id)
     .select('draft_page')
     .single()
   saving.value = false
   if (e) {
-    error.value = errorMessage(e)
+    if (silent) autosaveError.value = errorMessage(e)
+    else error.value = errorMessage(e)
     return false
   }
+  autosaveError.value = ''
   savedDraft.value = data.draft_page
-  lastSavedText.value = text.value
-  notice.value = 'Borrador guardado.'
+  lastSavedText.value = snapshot
+  lastSavedAt.value = new Date()
+  if (!silent) notice.value = 'Borrador guardado.'
   return true
 }
+
+// Autoguardado: 2 s después del último cambio. Solo guarda el borrador, nunca publica.
+let autosaveTimer: ReturnType<typeof setTimeout> | null = null
+function scheduleAutosave() {
+  if (autosaveTimer) clearTimeout(autosaveTimer)
+  autosaveTimer = setTimeout(runAutosave, 2000)
+}
+async function runAutosave() {
+  autosaveTimer = null
+  if (!autosave.value || !canEdit.value || !hasUnsaved.value || structureError.value) return
+  if (saving.value || publishing.value) return scheduleAutosave() // ocupado: reintenta
+  await saveDraft(true)
+  // Si mientras guardaba hubo más cambios, se programa otro guardado
+  if (hasUnsaved.value && !autosaveError.value) scheduleAutosave()
+}
+watch(text, () => {
+  if (autosave.value && canEdit.value) scheduleAutosave()
+})
+
+const saveStatus = computed(() => {
+  if (saving.value) return { text: 'Guardando…', cls: 'text-neutral-500' }
+  if (autosaveError.value) return { text: `No se pudo autoguardar: ${autosaveError.value}`, cls: 'text-red-600' }
+  if (hasUnsaved.value) {
+    if (structureError.value) return { text: 'Cambios sin guardar (corrige el JSON para guardar)', cls: 'text-red-600' }
+    return { text: autosave.value && canEdit.value ? 'Cambios pendientes…' : 'Cambios sin guardar', cls: 'text-amber-700' }
+  }
+  if (lastSavedAt.value) {
+    const t = lastSavedAt.value.toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' })
+    return { text: `Guardado a las ${t}`, cls: 'text-green-700' }
+  }
+  return null
+})
+
+// ===== Atajos, selección y salida de la página =====
+function onKey(e: KeyboardEvent) {
+  if (!(e.metaKey || e.ctrlKey) || e.altKey || !canEdit.value) return
+  // En campos de texto se deja el deshacer nativo del navegador
+  const t = e.target as HTMLElement | null
+  if (t && (['INPUT', 'TEXTAREA', 'SELECT'].includes(t.tagName) || t.isContentEditable)) return
+  const k = e.key.toLowerCase()
+  if (k === 'z' && !e.shiftKey) {
+    e.preventDefault()
+    undo()
+  } else if ((k === 'z' && e.shiftKey) || k === 'y') {
+    e.preventDefault()
+    redo()
+  }
+}
+
+function onBeforeUnload(e: BeforeUnloadEvent) {
+  if (hasUnsaved.value) e.preventDefault()
+}
+
+onBeforeUnmount(() => {
+  window.removeEventListener('keydown', onKey)
+  window.removeEventListener('beforeunload', onBeforeUnload)
+  if (autosaveTimer) clearTimeout(autosaveTimer)
+})
+
+// Si deshacer elimina páginas, la selección no puede quedar fuera de rango
+watch(v2, (n) => {
+  if (n && selected.value > n.pages.length - 1) selected.value = Math.max(0, n.pages.length - 1)
+})
+
+// Al navegar a otra pantalla: se intenta guardar antes y, si no se puede, se pregunta
+onBeforeRouteLeave(async () => {
+  if (autosave.value && canEdit.value && hasUnsaved.value && !structureError.value && !saving.value) {
+    await saveDraft(true)
+  }
+  if (!hasUnsaved.value) return true
+  return confirm('Tienes cambios sin guardar. ¿Salir de todas formas?')
+})
 
 async function publish() {
   if (sectionProblems.value.length) {
@@ -363,8 +453,8 @@ async function publish() {
       <span class="text-xs" :class="status === 'published' ? 'text-green-700' : 'text-amber-700'">
         {{ status === 'published' ? 'Publicado' : 'Borrador' }}
       </span>
-      <span v-if="hasUnsaved" class="text-xs text-red-600">Cambios sin guardar</span>
-      <span v-else-if="hasUnpublished" class="text-xs text-amber-700">Hay cambios sin publicar</span>
+      <span v-if="saveStatus" class="text-xs" :class="saveStatus.cls">{{ saveStatus.text }}</span>
+      <span v-if="!hasUnsaved && hasUnpublished" class="text-xs text-amber-700">Hay cambios sin publicar</span>
       <a
         v-if="status === 'published'"
         :href="`${viewerUrl}/${slug}`"
@@ -406,8 +496,17 @@ async function publish() {
         </button>
       </div>
 
-      <div v-if="canEdit" class="ml-auto flex gap-2">
-        <button class="btn btn-secondary" :disabled="saving || publishing || !hasUnsaved" @click="saveDraft">
+      <div v-if="canEdit" class="ml-auto flex flex-wrap items-center gap-2">
+        <button type="button" class="btn btn-secondary" :disabled="!canUndo" title="Deshacer (Ctrl/⌘+Z)" @click="undo()">
+          ↶ Deshacer
+        </button>
+        <button type="button" class="btn btn-secondary" :disabled="!canRedo" title="Rehacer (Ctrl/⌘+Shift+Z)" @click="redo()">
+          ↷ Rehacer
+        </button>
+        <label class="flex items-center gap-1 text-xs text-neutral-600">
+          <input v-model="autosave" type="checkbox" /> Autoguardado
+        </label>
+        <button class="btn btn-secondary" :disabled="saving || publishing || !hasUnsaved" @click="saveDraft()">
           {{ saving ? 'Guardando…' : 'Guardar borrador' }}
         </button>
         <button
