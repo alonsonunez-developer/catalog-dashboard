@@ -54,3 +54,6 @@ export async function deleteStoredImage(url: string | null | undefined) {
   const { error } = await supabase.storage.from(BUCKET).remove([path])
   if (error) console.error('No se pudo borrar la imagen', error)
 }
+
+// La subida no es específica de productos: se usa también para la portada
+export const uploadImage = uploadProductImage

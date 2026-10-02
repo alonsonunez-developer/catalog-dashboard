@@ -22,6 +22,7 @@ import { supabase } from '../lib/supabase'
 import { canEdit, organization } from '../lib/session'
 import { errorMessage, fetchCategories, fetchProducts, toRendererData, type Product } from '../lib/data'
 import ShareCard from '../components/ShareCard.vue'
+import { ACCEPT_ATTR, uploadImage, validateImage } from '../lib/storage'
 
 type PageV2 = Extract<Page, { version: 2 }>
 
@@ -170,7 +171,43 @@ const layouts = pageLayouts()
 const entry = computed(() => v2.value?.pages[selected.value] ?? null)
 const info = computed(() => (entry.value ? layouts.find((l) => l.name === entry.value!.layout) : undefined))
 const maxProducts = computed(() => info.value?.maxProducts ?? 0)
-const fields = computed(() => (entry.value ? describeProps(entry.value.layout).filter((f) => f.kind !== 'unsupported') : []))
+const allFields = computed(() => (entry.value ? describeProps(entry.value.layout).filter((f) => f.kind !== 'unsupported') : []))
+// La imagen tiene su propio selector de archivo, así que se excluye de la lista genérica
+const fields = computed(() => allFields.value.filter((f) => f.key !== 'image'))
+const hasImageField = computed(() => allFields.value.some((f) => f.key === 'image'))
+const coverImage = computed(() => (typeof entry.value?.props.image === 'string' ? entry.value.props.image : ''))
+
+const uploadingImage = ref(false)
+const imageError = ref('')
+
+async function onCoverFile(ev: Event) {
+  const input = ev.target as HTMLInputElement
+  const file = input.files?.[0]
+  input.value = ''
+  if (!file || !v2.value || !entry.value) return
+  imageError.value = ''
+  const invalid = validateImage(file)
+  if (invalid) {
+    imageError.value = invalid
+    return
+  }
+  const pageId = entry.value.id // por si el usuario cambia de página mientras sube
+  uploadingImage.value = true
+  try {
+    const url = await uploadImage(organization.value!.id, file)
+    const current = v2.value
+    const i = current ? current.pages.findIndex((p) => p.id === pageId) : -1
+    if (!current || i < 0) return
+    update({
+      ...current,
+      pages: current.pages.map((p, k) => (k === i ? { ...p, props: { ...p.props, image: url } } : p)),
+    })
+  } catch (e) {
+    imageError.value = errorMessage(e)
+  } finally {
+    uploadingImage.value = false
+  }
+}
 
 const productById = computed(() => new Map(allProducts.value.map((p) => [p.id, p])))
 const productName = (pid: string) => productById.value.get(pid)?.name ?? '(producto eliminado)'
@@ -460,6 +497,31 @@ async function publish() {
           <p class="mt-1 text-xs text-neutral-500">{{ info?.description }}</p>
         </div>
 
+                <div v-if="hasImageField" class="space-y-2">
+          <label class="label" for="f-image-file">Imagen de fondo</label>
+          <div class="flex items-center gap-3">
+            <img v-if="coverImage" :src="coverImage" alt="" class="h-16 w-16 rounded object-cover" />
+            <div v-else class="flex h-16 w-16 items-center justify-center rounded bg-neutral-100 text-xs text-neutral-400">
+              Sin imagen
+            </div>
+            <div class="space-y-1">
+              <input
+                id="f-image-file"
+                type="file"
+                :accept="ACCEPT_ATTR"
+                class="block text-sm"
+                :disabled="!canEdit || uploadingImage"
+                @change="onCoverFile"
+              />
+              <button v-if="coverImage && canEdit" type="button" class="text-xs text-red-700 underline" @click="setProp('image', '')">
+                Quitar imagen
+              </button>
+            </div>
+          </div>
+          <p v-if="uploadingImage" class="text-xs text-neutral-500">Subiendo imagen…</p>
+          <p v-if="imageError" class="text-xs text-red-600">{{ imageError }}</p>
+          <p class="text-xs text-neutral-500">JPG, PNG o WebP. Se optimiza al subirla. Recuerda guardar el borrador.</p>
+        </div>
         <!-- Textos y opciones, generados del schema del layout -->
         <div v-for="f in fields" :key="f.key">
           <label v-if="f.kind === 'boolean'" class="flex items-center gap-2 text-sm">
