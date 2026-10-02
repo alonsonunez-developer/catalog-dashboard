@@ -21,6 +21,7 @@ import {
 import { supabase } from '../lib/supabase'
 import { canEdit, organization } from '../lib/session'
 import { errorMessage, fetchCategories, fetchProducts, toRendererData, type Product } from '../lib/data'
+import ShareCard from '../components/ShareCard.vue'
 
 type PageV2 = Extract<Page, { version: 2 }>
 
@@ -391,6 +392,7 @@ async function publish() {
     </ul>
     <p v-if="error" class="text-sm text-red-600">{{ error }}</p>
     <p v-if="notice" class="text-sm text-green-700">{{ notice }}</p>
+    <ShareCard v-if="status === 'published'" :url="`${viewerUrl}/${slug}`" :name="name" :slug="slug" />
 
     <!-- ===== Editor visual ===== -->
     <div v-if="visual && v2" class="grid gap-4 lg:grid-cols-[15rem_minmax(0,1fr)_21rem]">
