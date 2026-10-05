@@ -15,13 +15,13 @@ import {
   pageLayouts,
   removePage,
   setPageProducts,
-  themes,
   type Page,
 } from 'catalog-kit'
 import { supabase } from '../lib/supabase'
 import { canEdit, organization } from '../lib/session'
 import { errorMessage, fetchCategories, fetchProducts, toRendererData, type Product } from '../lib/data'
 import ShareCard from '../components/ShareCard.vue'
+import ThemeEditor from '../components/ThemeEditor.vue'
 import { useTextHistory } from '../lib/useHistory'
 import { ACCEPT_ATTR, uploadImage, validateImage } from '../lib/storage'
 
@@ -165,8 +165,8 @@ function update(next: PageV2) {
 }
 
 // ===== Tema =====
-const currentTheme = computed(() => (typeof page.value?.theme === 'string' ? page.value.theme : ''))
-function setTheme(theme: string) {
+// Puede ser el nombre de un tema predefinido o un tema completo (personalizado)
+function setTheme(theme: unknown) {
   if (!page.value) return
   text.value = JSON.stringify({ ...page.value, theme }, null, 2)
 }
@@ -468,18 +468,7 @@ async function publish() {
 
     <!-- Barra de herramientas -->
     <div class="flex flex-wrap items-center gap-3">
-      <label class="label !mb-0" for="theme">Tema</label>
-      <select
-        id="theme"
-        class="input !w-auto"
-        :value="currentTheme"
-        :disabled="!canEdit || !page"
-        @change="setTheme(($event.target as HTMLSelectElement).value)"
-      >
-        <option v-if="!(currentTheme in themes)" :value="currentTheme">{{ currentTheme || '(personalizado)' }}</option>
-        <option v-for="t in Object.keys(themes)" :key="t" :value="t">{{ t }}</option>
-      </select>
-
+      <ThemeEditor :model-value="page?.theme" :disabled="!canEdit || !page" @update:model-value="setTheme" />
       <div class="flex overflow-hidden rounded-md border border-neutral-300 text-sm">
         <button
           type="button"
