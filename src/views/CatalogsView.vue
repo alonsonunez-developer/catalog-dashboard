@@ -1,10 +1,21 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
-import { buildPageFromTemplate, catalogTemplates } from 'catalog-kit'
+import { buildPageFromTemplate, catalogTemplates, sampleCatalog, type CatalogDataInput } from 'catalog-kit'
 import { supabase } from '../lib/supabase'
 import { canEdit, organization } from '../lib/session'
-import { errorMessage, fetchCategories, fetchProducts, slugify, SLUG_RE, starterPage } from '../lib/data'
+import {
+  errorMessage,
+  fetchCategories,
+  fetchProducts,
+  slugify,
+  SLUG_RE,
+  starterPage,
+  toRendererData,
+  type Category,
+  type Product,
+} from '../lib/data'
+import TemplatePreview from '../components/TemplatePreview.vue'
 
 interface CatalogRow {
   id: string
@@ -18,7 +29,8 @@ const orgId = () => organization.value!.id
 const viewerUrl = import.meta.env.VITE_VIEWER_URL as string
 
 const catalogs = ref<CatalogRow[]>([])
-const activeProducts = ref(0)
+const allProducts = ref<Product[]>([])
+const allCategories = ref<Category[]>([])
 const loading = ref(true)
 const error = ref('')
 
@@ -38,18 +50,32 @@ watch(name, (n) => {
 })
 const slugValid = computed(() => SLUG_RE.test(slug.value))
 
+const activeProducts = computed(() => allProducts.value.filter((p) => p.is_active).length)
+const usingSample = computed(() => activeProducts.value === 0)
+const selectedTemplate = computed(() => catalogTemplates.find((t) => t.id === templateId.value) ?? null)
+const previewTitle = computed(() => name.value.trim() || 'Nombre del catálogo')
+
+// Vista previa con los datos reales del negocio; si aún no hay productos, con datos de ejemplo
+const previewData = computed<CatalogDataInput>(() =>
+  usingSample.value
+    ? sampleCatalog
+    : toRendererData(organization.value!, allCategories.value, allProducts.value),
+)
+
 async function load() {
-  const [{ data, error: e }, products] = await Promise.all([
+  const [{ data, error: e }, products, categories] = await Promise.all([
     supabase
       .from('catalogs')
       .select('id, name, slug, status')
       .eq('organization_id', orgId())
       .order('created_at', { ascending: false }),
-    fetchProducts(orgId()).catch(() => []),
+    fetchProducts(orgId()).catch(() => [] as Product[]),
+    fetchCategories(orgId()).catch(() => [] as Category[]),
   ])
   if (e) error.value = errorMessage(e)
   catalogs.value = (data ?? []) as CatalogRow[]
-  activeProducts.value = products.filter((p) => p.is_active).length
+  allProducts.value = products
+  allCategories.value = categories
   loading.value = false
 }
 onMounted(load)
@@ -65,12 +91,11 @@ async function create() {
       draft = starterPage(title)
     } else {
       const template = catalogTemplates.find((t) => t.id === templateId.value)!
-      const [categories, products] = await Promise.all([fetchCategories(org.id), fetchProducts(org.id)])
       draft = buildPageFromTemplate(template, {
         title,
         subtitle: org.business.tagline,
-        categories: categories.map((c) => ({ id: c.id, name: c.name })),
-        products: products
+        categories: allCategories.value.map((c) => ({ id: c.id, name: c.name })),
+        products: allProducts.value
           .filter((p) => p.is_active)
           .map((p) => ({ id: p.id, categoryId: p.category_id ?? undefined })),
       })
@@ -117,20 +142,43 @@ async function create() {
           <label
             v-for="t in templateOptions"
             :key="t.id"
-            class="flex cursor-pointer gap-2 rounded-md border p-3 text-sm"
+            class="flex cursor-pointer items-start gap-3 rounded-md border p-3 text-sm"
             :class="templateId === t.id ? 'border-neutral-900 bg-neutral-50' : 'border-neutral-200'"
           >
             <input v-model="templateId" type="radio" name="template" :value="t.id" class="mt-1" />
-            <span>
+            <span class="min-w-0 flex-1">
               <span class="block font-medium">{{ t.name }}</span>
               <span class="text-neutral-600">{{ t.description }}</span>
             </span>
+            <TemplatePreview
+              v-if="t.id !== 'blank' && !loading"
+              :template="catalogTemplates.find((x) => x.id === t.id)!"
+              :title="previewTitle"
+              :subtitle="organization?.business.tagline"
+              :data="previewData"
+              cover-only
+              :width="72"
+            />
           </label>
         </div>
-        <p v-if="templateId !== 'blank'" class="mt-2 text-xs text-neutral-500">
-          Se repartirán tus {{ activeProducts }} productos visibles
-          <template v-if="!activeProducts">(aún no tienes: el catálogo quedará solo con portada y contacto)</template>
-          en páginas, agrupados por categoría. Después podrás ajustarlo.
+
+        <div v-if="selectedTemplate && !loading" class="mt-4 space-y-2">
+          <p class="text-sm font-medium">Vista previa: {{ selectedTemplate.name }}</p>
+          <TemplatePreview
+            :template="selectedTemplate"
+            :title="previewTitle"
+            :subtitle="organization?.business.tagline"
+            :data="previewData"
+          />
+          <p class="text-xs text-neutral-500">
+            <template v-if="usingSample">
+              Con datos de ejemplo. Cuando agregues productos, aquí verás los tuyos, agrupados por categoría.
+            </template>
+            <template v-else>Con tus {{ activeProducts }} productos visibles, agrupados por categoría. Después podrás ajustarlo.</template>
+          </p>
+        </div>
+        <p v-else-if="templateId === 'blank'" class="mt-2 text-xs text-neutral-500">
+          Una sola página larga con portada, categorías, todos tus productos y pie de página.
         </p>
       </fieldset>
 
