@@ -33,6 +33,9 @@ const LAYOUT_LABELS: Record<string, string> = {
   ProductDuo: '2 productos',
   ProductGrid8: 'Hasta 8 productos',
   ContactPage: 'Contacto',
+  SportHero: 'Portada deportiva',
+  ProductGrid4: '4 productos',
+  FeatureStrip: 'Características',
 }
 const FIELD_LABELS: Record<string, string> = {
   title: 'Título',
@@ -43,6 +46,12 @@ const FIELD_LABELS: Record<string, string> = {
   showSku: 'Mostrar código',
   showDescription: 'Mostrar descripción',
   attributeKeys: 'Atributos a mostrar (claves separadas por coma; vacío = todos)',
+  eyebrow: 'Etiqueta superior',
+  season: 'Temporada',
+  showCategory: 'Mostrar categoría',
+  showAttributes: 'Mostrar atributos (colores, tallas…)',
+  features: 'Características (separadas por coma)',
+  text: 'Texto',
 }
 const layoutLabel = (l: string) => LAYOUT_LABELS[l] ?? l
 const fieldLabel = (k: string) => FIELD_LABELS[k] ?? k

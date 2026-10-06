@@ -19,9 +19,13 @@ async function submit() {
   info.value = ''
   try {
     const credentials = { email: email.value.trim(), password: password.value }
-    const { data, error: e } =
+        const { data, error: e } =
       mode.value === 'signup'
-        ? await supabase.auth.signUp(credentials)
+        ? await supabase.auth.signUp({
+            ...credentials,
+            // El enlace del correo vuelve al sitio desde el que se registró (producción o local)
+            options: { emailRedirectTo: window.location.origin },
+          })
         : await supabase.auth.signInWithPassword(credentials)
     if (e) throw e
     if (!data.session) {
