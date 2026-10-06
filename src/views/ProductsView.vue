@@ -12,6 +12,17 @@ import {
 } from '../lib/data'
 import { ACCEPT_ATTR, deleteStoredImage, uploadProductImage, validateImage } from '../lib/storage'
 
+interface Photo {
+  key: string
+  url: string // URL ya guardada ('' si todavía es un archivo por subir)
+  file: File | null
+  preview: string
+}
+
+const MAX_PHOTOS = 8 // la principal + 7 en la galería (coincide con el límite de la base)
+let seq = 0
+const newKey = () => `ph${seq++}`
+
 const orgId = () => organization.value!.id
 const defs = computed(() => organization.value!.attribute_defs ?? [])
 const products = ref<Product[]>([])
@@ -28,9 +39,8 @@ const emptyForm = () => ({
   compare_at_price: '' as number | '',
   sku: '',
   description: '',
-  image_url: '',
-  originalImage: '' as string,
-  file: null as File | null,
+  photos: [] as Photo[],
+  originalPhotos: [] as string[], // URLs guardadas al abrir el formulario
   category_id: '',
   is_active: true,
   // Valores de los atributos definidos; las listas se escriben separadas por comas
@@ -40,36 +50,46 @@ const emptyForm = () => ({
 })
 const form = ref(emptyForm())
 
-// Vista previa: el archivo elegido (aún sin subir) o la imagen actual
-const objectUrl = ref('')
-const preview = computed(() => objectUrl.value || form.value.image_url)
-
-function clearObjectUrl() {
-  if (objectUrl.value) URL.revokeObjectURL(objectUrl.value)
-  objectUrl.value = ''
+function revokePreviews() {
+  form.value.photos.forEach((p) => p.file && URL.revokeObjectURL(p.preview))
 }
-onBeforeUnmount(clearObjectUrl)
+onBeforeUnmount(revokePreviews)
 
-function onFile(ev: Event) {
+function onFiles(ev: Event) {
   const input = ev.target as HTMLInputElement
-  const file = input.files?.[0]
+  const files = Array.from(input.files ?? [])
   input.value = ''
-  if (!file) return
-  const invalid = validateImage(file)
-  if (invalid) {
-    error.value = invalid
-    return
-  }
   error.value = ''
-  clearObjectUrl()
-  objectUrl.value = URL.createObjectURL(file)
-  form.value.file = file
+  for (const file of files) {
+    if (form.value.photos.length >= MAX_PHOTOS) {
+      error.value = `Máximo ${MAX_PHOTOS} fotos por producto.`
+      break
+    }
+    const invalid = validateImage(file)
+    if (invalid) {
+      error.value = invalid
+      continue
+    }
+    form.value.photos.push({ key: newKey(), url: '', file, preview: URL.createObjectURL(file) })
+  }
 }
 
-function removeImage() {
-  clearObjectUrl()
-  form.value.file = null
-  form.value.image_url = ''
+function removePhoto(i: number) {
+  const [p] = form.value.photos.splice(i, 1)
+  if (p?.file) URL.revokeObjectURL(p.preview)
+}
+
+function movePhoto(i: number, delta: number) {
+  const list = form.value.photos
+  const j = i + delta
+  if (j < 0 || j >= list.length) return
+  ;[list[i], list[j]] = [list[j], list[i]]
+}
+
+function makeMain(i: number) {
+  const list = form.value.photos
+  const [p] = list.splice(i, 1)
+  list.unshift(p)
 }
 
 const categoryName = computed(() => new Map(categories.value.map((c) => [c.id, c.name])))
@@ -89,13 +109,15 @@ async function load() {
 onMounted(load)
 
 function create() {
-  clearObjectUrl()
+  revokePreviews()
   form.value = emptyForm()
   showForm.value = true
 }
 
+const storedPhotos = (p: Product) => [p.image_url, ...p.gallery].filter((u): u is string => !!u)
+
 function edit(p: Product) {
-  clearObjectUrl()
+  revokePreviews()
   const known = new Set(defs.value.map((d) => d.key))
   const attrs: Record<string, string> = {}
   const extra: Record<string, AttributeValue> = {}
@@ -104,6 +126,7 @@ function edit(p: Product) {
     attrs[d.key] = Array.isArray(v) ? v.join(', ') : (v ?? '')
   }
   for (const [k, v] of Object.entries(p.attributes)) if (!known.has(k)) extra[k] = v
+  const urls = storedPhotos(p)
   form.value = {
     id: p.id,
     name: p.name,
@@ -111,9 +134,8 @@ function edit(p: Product) {
     compare_at_price: p.compare_at_price ?? '',
     sku: p.sku ?? '',
     description: p.description ?? '',
-    image_url: p.image_url ?? '',
-    originalImage: p.image_url ?? '',
-    file: null,
+    photos: urls.map((url) => ({ key: newKey(), url, file: null, preview: url })),
+    originalPhotos: urls,
     category_id: p.category_id ?? '',
     is_active: p.is_active,
     attrs,
@@ -123,7 +145,7 @@ function edit(p: Product) {
 }
 
 function cancel() {
-  clearObjectUrl()
+  revokePreviews()
   showForm.value = false
 }
 
@@ -148,17 +170,26 @@ async function save() {
   }
 
   saving.value = true
-  let uploadedUrl: string | null = null
+  const uploaded: string[] = [] // para limpiar si algo falla antes de guardar el producto
   try {
-    if (f.file) uploadedUrl = await uploadProductImage(orgId(), f.file)
-    const imageUrl = uploadedUrl ?? (f.image_url.trim() || null)
+    const urls: string[] = []
+    for (const p of f.photos) {
+      if (p.file) {
+        const url = await uploadProductImage(orgId(), p.file)
+        uploaded.push(url)
+        urls.push(url)
+      } else {
+        urls.push(p.url)
+      }
+    }
     const payload = {
       name: f.name.trim(),
       price: f.price,
       compare_at_price: compareAt,
       sku: f.sku.trim() || null,
       description: f.description.trim() || null,
-      image_url: imageUrl,
+      image_url: urls[0] ?? null,
+      gallery: urls.slice(1),
       category_id: f.category_id || null,
       is_active: f.is_active,
       attributes: buildAttributes(),
@@ -167,15 +198,17 @@ async function save() {
       ? await supabase.from('products').update(payload).eq('id', f.id)
       : await supabase.from('products').insert({ ...payload, organization_id: orgId() })
     if (e) throw e
-    // Se borra la imagen anterior solo después de guardar bien
-    if (f.originalImage && f.originalImage !== imageUrl) await deleteStoredImage(f.originalImage)
-    clearObjectUrl()
+
+    uploaded.length = 0 // ya están en uso: no se limpian
+    // Las fotos quitadas se borran de Storage solo después de guardar bien
+    const keep = new Set(urls)
+    for (const old of f.originalPhotos) if (!keep.has(old)) await deleteStoredImage(old)
+    revokePreviews()
     showForm.value = false
     await load()
   } catch (e) {
     error.value = errorMessage(e)
-    // Si la imagen nueva se subió pero el producto no se guardó, se limpia
-    if (uploadedUrl) await deleteStoredImage(uploadedUrl)
+    for (const u of uploaded) await deleteStoredImage(u)
   } finally {
     saving.value = false
   }
@@ -189,7 +222,7 @@ async function remove(p: Product) {
     error.value = errorMessage(e)
     return
   }
-  await deleteStoredImage(p.image_url)
+  for (const u of storedPhotos(p)) await deleteStoredImage(u)
   await load()
 }
 </script>
@@ -227,21 +260,39 @@ async function remove(p: Product) {
         </select>
       </div>
 
-      <div>
-        <label class="label" for="p-file">Imagen</label>
-        <div class="flex items-center gap-3">
-          <img v-if="preview" :src="preview" alt="" class="h-16 w-16 rounded object-cover" />
-          <div v-else class="flex h-16 w-16 items-center justify-center rounded bg-neutral-100 text-xs text-neutral-400">
-            Sin foto
-          </div>
-          <div class="space-y-1">
-            <input id="p-file" type="file" :accept="ACCEPT_ATTR" class="block text-sm" @change="onFile" />
-            <button v-if="preview" type="button" class="text-xs text-red-700 underline" @click="removeImage">
-              Quitar imagen
-            </button>
-          </div>
-        </div>
-        <p class="mt-1 text-xs text-neutral-500">JPG, PNG o WebP. Se optimiza automáticamente al guardar.</p>
+      <div class="md:col-span-2">
+        <label class="label" for="p-files">Fotos ({{ form.photos.length }}/{{ MAX_PHOTOS }})</label>
+        <ul v-if="form.photos.length" class="mb-2 grid grid-cols-2 gap-2 sm:grid-cols-4">
+          <li v-for="(ph, i) in form.photos" :key="ph.key" class="space-y-1 rounded-md border border-neutral-200 p-1.5">
+            <div class="relative">
+              <img :src="ph.preview" alt="" class="aspect-square w-full rounded object-cover" />
+              <span
+                v-if="i === 0"
+                class="absolute left-1 top-1 rounded bg-neutral-900 px-1.5 py-0.5 text-[10px] text-white"
+              >
+                Principal
+              </span>
+            </div>
+            <div class="flex flex-wrap gap-1">
+              <button type="button" class="btn btn-secondary !px-1.5 !py-0.5" :disabled="i === 0" title="Mover antes" @click="movePhoto(i, -1)">←</button>
+              <button type="button" class="btn btn-secondary !px-1.5 !py-0.5" :disabled="i === form.photos.length - 1" title="Mover después" @click="movePhoto(i, 1)">→</button>
+              <button v-if="i > 0" type="button" class="btn btn-secondary !px-1.5 !py-0.5 text-xs" @click="makeMain(i)">Principal</button>
+              <button type="button" class="btn btn-danger !px-1.5 !py-0.5" title="Quitar foto" @click="removePhoto(i)">✕</button>
+            </div>
+          </li>
+        </ul>
+        <input
+          id="p-files"
+          type="file"
+          multiple
+          :accept="ACCEPT_ATTR"
+          class="block text-sm"
+          :disabled="form.photos.length >= MAX_PHOTOS"
+          @change="onFiles"
+        />
+        <p class="mt-1 text-xs text-neutral-500">
+          JPG, PNG o WebP. La primera es la principal; las demás forman la galería. Se optimizan al guardar.
+        </p>
       </div>
 
       <div class="md:col-span-2">
@@ -293,7 +344,16 @@ async function remove(p: Product) {
           <tr v-for="p in products" :key="p.id" class="border-b last:border-0">
             <td class="px-3 py-2">
               <div class="flex items-center gap-3">
-                <img v-if="p.image_url" :src="p.image_url" alt="" class="h-10 w-10 rounded object-cover" />
+                <div class="relative">
+                  <img v-if="p.image_url" :src="p.image_url" alt="" class="h-10 w-10 rounded object-cover" />
+                  <div v-else class="h-10 w-10 rounded bg-neutral-100" />
+                  <span
+                    v-if="p.gallery.length"
+                    class="absolute -right-1 -top-1 rounded-full bg-neutral-900 px-1 text-[10px] text-white"
+                  >
+                    +{{ p.gallery.length }}
+                  </span>
+                </div>
                 <span class="font-medium">{{ p.name }}</span>
               </div>
             </td>

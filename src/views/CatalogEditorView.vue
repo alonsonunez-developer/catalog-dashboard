@@ -38,6 +38,7 @@ const LAYOUT_LABELS: Record<string, string> = {
   FeatureStrip: 'Características',
   WesternHero: 'Portada western',
   ProductShowcase: '1 destacado + 3',
+  ProductGallery: '1 producto con galería',
 }
 const FIELD_LABELS: Record<string, string> = {
   title: 'Título',
