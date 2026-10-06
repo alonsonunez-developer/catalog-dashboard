@@ -39,6 +39,8 @@ const LAYOUT_LABELS: Record<string, string> = {
   WesternHero: 'Portada western',
   ProductShowcase: '1 destacado + 3',
   ProductGallery: '1 producto con galería',
+  PriceList: 'Lista de precios',
+  ProductSplit: 'Foto grande + texto (2)',
 }
 const FIELD_LABELS: Record<string, string> = {
   title: 'Título',
@@ -55,6 +57,8 @@ const FIELD_LABELS: Record<string, string> = {
   showAttributes: 'Mostrar atributos (colores, tallas…)',
   features: 'Características (separadas por coma)',
   text: 'Texto',
+  showDots: 'Puntos guía entre nombre y precio',
+  imageSide: 'Lado de la foto',
 }
 const layoutLabel = (l: string) => LAYOUT_LABELS[l] ?? l
 const fieldLabel = (k: string) => FIELD_LABELS[k] ?? k
