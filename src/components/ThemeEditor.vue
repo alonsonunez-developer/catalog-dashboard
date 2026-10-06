@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import {
   ThemeSchema,
   baseThemeName,
@@ -12,22 +12,42 @@ import {
   type Theme,
 } from 'catalog-kit'
 
-const props = defineProps<{ modelValue: unknown; disabled?: boolean }>()
+const props = defineProps<{ modelValue: unknown; disabled?: boolean; brand?: Theme | null }>()
 const emit = defineEmits<{ 'update:modelValue': [value: string | Theme] }>()
 
 const open = ref(false)
+const root = ref<HTMLElement | null>(null)
 
+// Cerrar al hacer clic fuera del panel o con Escape
+function onPointerDown(e: PointerEvent) {
+  if (open.value && root.value && !root.value.contains(e.target as Node)) open.value = false
+}
+function onKeyDown(e: KeyboardEvent) {
+  if (e.key === 'Escape') open.value = false
+}
+onMounted(() => {
+  document.addEventListener('pointerdown', onPointerDown)
+  document.addEventListener('keydown', onKeyDown)
+})
+onBeforeUnmount(() => {
+  document.removeEventListener('pointerdown', onPointerDown)
+  document.removeEventListener('keydown', onKeyDown)
+})
+
+const isBrand = computed(() => props.modelValue === 'brand')
 const isCustom = computed(() => typeof props.modelValue === 'object' && props.modelValue !== null)
 
-// Tema efectivo: el nombre resuelto, o el objeto si es válido
+// Tema efectivo: el nombre resuelto, el tema de marca, o el objeto si es válido
 const theme = computed<Theme>(() => {
   const v = props.modelValue
-  if (typeof v === 'string') return resolveTheme(v)
+  if (typeof v === 'string') return resolveTheme(v, props.brand)
   const r = ThemeSchema.safeParse(v)
   return r.success ? r.data : resolveTheme('joyeria')
 })
-const base = computed(() => baseThemeName(isCustom.value ? theme.value : (props.modelValue as string)))
-const selectValue = computed(() => (isCustom.value ? '__custom' : base.value))
+const base = computed(() =>
+  baseThemeName(typeof props.modelValue === 'string' && !isBrand.value ? props.modelValue : theme.value),
+)
+const selectValue = computed(() => (isBrand.value ? 'brand' : isCustom.value ? '__custom' : base.value))
 
 const colorFields = [
   { key: 'primary', label: 'Color principal (botones, precios)' },
@@ -62,7 +82,7 @@ const warnings = computed(() => {
 </script>
 
 <template>
-  <div class="relative flex items-center gap-2">
+  <div ref="root" class="relative flex items-center gap-2">
     <label class="label !mb-0" for="theme">Tema</label>
     <select
       id="theme"
@@ -71,6 +91,7 @@ const warnings = computed(() => {
       :disabled="disabled"
       @change="pickPreset(($event.target as HTMLSelectElement).value)"
     >
+      <option v-if="brand || isBrand" value="brand">Colores de mi negocio</option>
       <option v-if="isCustom" value="__custom">Personalizado (base: {{ base }})</option>
       <option v-for="t in Object.keys(themes)" :key="t" :value="t">{{ t }}</option>
     </select>
@@ -78,10 +99,19 @@ const warnings = computed(() => {
       {{ open ? 'Cerrar' : 'Personalizar' }}
     </button>
 
-    <div v-if="open && !disabled" class="card absolute left-0 top-full z-20 mt-2 w-[22rem] space-y-3 shadow-lg">
-      <p class="text-xs text-neutral-500">
-        Parte de «{{ base }}». Tus cambios se guardan solo en este catálogo.
-      </p>
+    <div
+      v-if="open && !disabled"
+      class="card absolute left-0 top-full z-20 mt-2 max-h-[80vh] w-[22rem] space-y-3 overflow-y-auto shadow-lg"
+    >
+      <div class="flex items-start justify-between gap-2">
+        <p class="text-xs text-neutral-500">
+          <template v-if="isBrand">
+            Este catálogo usa los colores de tu negocio. Si cambias algo aquí, dejará de usarlos y guardará su propia copia.
+          </template>
+          <template v-else>Parte de «{{ base }}». Tus cambios se guardan solo en este catálogo.</template>
+        </p>
+        <button type="button" class="btn btn-secondary !px-2 !py-0.5" aria-label="Cerrar panel" @click="open = false">✕</button>
+      </div>
 
       <div v-for="f in colorFields" :key="f.key" class="flex items-center justify-between gap-3">
         <label class="text-sm" :for="`c-${f.key}`">{{ f.label }}</label>
@@ -137,6 +167,9 @@ const warnings = computed(() => {
         <li v-for="w in warnings" :key="w">{{ w }}</li>
       </ul>
 
+      <button v-if="brand && !isBrand" type="button" class="btn btn-secondary w-full" @click="emit('update:modelValue', 'brand')">
+        Usar los colores de mi negocio
+      </button>
       <button v-if="isCustom" type="button" class="btn btn-secondary w-full" @click="reset">
         Restablecer a «{{ base }}»
       </button>

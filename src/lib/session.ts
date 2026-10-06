@@ -1,6 +1,7 @@
 import { computed, ref } from 'vue'
 import type { Session } from '@supabase/supabase-js'
 import { supabase } from './supabase'
+import type { Theme } from 'catalog-kit'
 
 export type Role = 'admin' | 'editor' | 'viewer'
 
@@ -16,6 +17,7 @@ export interface Organization {
   currency: string
   business: Record<string, string>
   attribute_defs: AttributeDef[]
+  brand_theme: Theme | null
 }
 
 export const session = ref<Session | null>(null)
@@ -29,14 +31,18 @@ export const isAdmin = computed(() => role.value === 'admin')
 export async function loadOrganization(userId: string) {
   const { data, error } = await supabase
     .from('organization_members')
-    .select('role, organizations(id, name, currency, business, attribute_defs)')
+    .select('role, organizations(id, name, currency, business, attribute_defs, brand_theme)')
     .eq('user_id', userId) // sin este filtro se verían también las membresías de otros usuarios
     .limit(1)
   if (error) throw error
   const row = data?.[0] as unknown as { role: Role; organizations: Organization } | undefined
   organization.value = row?.organizations
-    ? { ...row.organizations, attribute_defs: row.organizations.attribute_defs ?? [] }
-    : null
+  ? {
+      ...row.organizations,
+      attribute_defs: row.organizations.attribute_defs ?? [],
+      brand_theme: row.organizations.brand_theme ?? null,
+    }
+  : null
   role.value = row?.role ?? null
 }
 

@@ -484,7 +484,12 @@ async function publish() {
 
     <!-- Barra de herramientas -->
     <div class="flex flex-wrap items-center gap-3">
-      <ThemeEditor :model-value="page?.theme" :disabled="!canEdit || !page" @update:model-value="setTheme" />
+      <ThemeEditor
+        :model-value="page?.theme"
+        :brand="organization?.brand_theme"
+        :disabled="!canEdit || !page"
+        @update:model-value="setTheme"
+      />
       <div class="flex overflow-hidden rounded-md border border-neutral-300 text-sm">
         <button
           type="button"

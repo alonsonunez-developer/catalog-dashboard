@@ -69,6 +69,7 @@ export function toRendererData(org: Organization, categories: Category[], produc
     currency: org.currency,
     business,
     attributeDefs: org.attribute_defs ?? [],
+    brandTheme: org.brand_theme ?? undefined,
     categories: categories.map((c) => ({ id: c.id, name: c.name })),
     products: products
       .filter((p) => p.is_active)
