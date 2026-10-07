@@ -6,6 +6,7 @@ const router = createRouter({
   routes: [
     { path: '/login', name: 'login', component: () => import('./views/LoginView.vue'), meta: { public: true } },
     { path: '/onboarding', name: 'onboarding', component: () => import('./views/OnboardingView.vue') },
+    { path: '/catalogs/:id/print', name: 'catalog-print', component: () => import('./views/PrintView.vue') },
     {
       path: '/',
       component: () => import('./views/AppLayout.vue'),

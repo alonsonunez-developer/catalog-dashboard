@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import { onBeforeRouteLeave, useRoute } from 'vue-router'
+import { onBeforeRouteLeave, useRoute, useRouter } from 'vue-router'
 import {
   PageRenderer,
   PageSchema,
@@ -64,6 +64,7 @@ const layoutLabel = (l: string) => LAYOUT_LABELS[l] ?? l
 const fieldLabel = (k: string) => FIELD_LABELS[k] ?? k
 
 const route = useRoute()
+const router = useRouter()
 const id = route.params.id as string
 const viewerUrl = import.meta.env.VITE_VIEWER_URL as string
 
@@ -185,6 +186,11 @@ function update(next: PageV2) {
 function setTheme(theme: unknown) {
   if (!page.value) return
   text.value = JSON.stringify({ ...page.value, theme }, null, 2)
+}
+
+function setDisplay(value: string) {
+  if (!v2.value) return
+  update({ ...v2.value, display: value === 'double' ? 'double' : 'single' })
 }
 
 // ===== Páginas =====
@@ -436,6 +442,15 @@ onBeforeRouteLeave(async () => {
   return confirm('Tienes cambios sin guardar. ¿Salir de todas formas?')
 })
 
+// Guarda el borrador y abre la vista de impresión en otra pestaña
+async function openPrint() {
+  const win = window.open('about:blank', '_blank')
+  if (hasUnsaved.value && !structureError.value) await saveDraft(true)
+  const url = router.resolve({ name: 'catalog-print', params: { id } }).href
+  if (win) win.location.href = url
+  else window.open(url, '_blank')
+}
+
 async function publish() {
   if (sectionProblems.value.length) {
     error.value = 'Corrige los problemas antes de publicar.'
@@ -490,6 +505,19 @@ async function publish() {
         :disabled="!canEdit || !page"
         @update:model-value="setTheme"
       />
+      <div v-if="v2" class="flex items-center gap-2">
+        <label class="label !mb-0" for="display">Vista pública</label>
+        <select
+          id="display"
+          class="input !w-auto"
+          :value="v2.display ?? 'single'"
+          :disabled="!canEdit"
+          @change="setDisplay(($event.target as HTMLSelectElement).value)"
+        >
+          <option value="single">1 página</option>
+          <option value="double">2 páginas (pantallas anchas)</option>
+        </select>
+      </div>
       <div class="flex overflow-hidden rounded-md border border-neutral-300 text-sm">
         <button
           type="button"
@@ -505,7 +533,7 @@ async function publish() {
           JSON avanzado
         </button>
       </div>
-
+      <button type="button" class="btn btn-secondary" @click="openPrint">Imprimir / PDF</button>
       <div v-if="canEdit" class="ml-auto flex flex-wrap items-center gap-2">
         <button type="button" class="btn btn-secondary" :disabled="!canUndo" title="Deshacer (Ctrl/⌘+Z)" @click="undo()">
           ↶ Deshacer
