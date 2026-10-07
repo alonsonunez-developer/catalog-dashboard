@@ -9,20 +9,22 @@ const props = withDefaults(
     title: string
     subtitle?: string
     data: CatalogDataInput
+    theme?: string // si se indica (por ejemplo "brand"), reemplaza el tema de la plantilla
     coverOnly?: boolean
     width?: number
   }>(),
-  { coverOnly: false, width: 150 },
+  { coverOnly: false, width: 150, theme: undefined },
 )
 
 const page = computed(() => {
   try {
-    return buildPageFromTemplate(props.template, {
+    const built = buildPageFromTemplate(props.template, {
       title: props.title,
       subtitle: props.subtitle,
       products: (props.data.products ?? []).map((p) => ({ id: p.id, categoryId: p.categoryId })),
       categories: props.data.categories ?? [],
     })
+    return props.theme ? { ...built, theme: props.theme } : built
   } catch {
     return null
   }

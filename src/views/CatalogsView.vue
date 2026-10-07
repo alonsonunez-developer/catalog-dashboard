@@ -40,6 +40,11 @@ const slugTouched = ref(false)
 const templateId = ref<string>(catalogTemplates[0].id)
 const creating = ref(false)
 
+// Colores de marca: la casilla solo existe si el negocio ya los definió, y viene marcada
+const hasBrand = computed(() => !!organization.value?.brand_theme)
+const useBrand = ref(!!organization.value?.brand_theme)
+const themeOverride = computed(() => (hasBrand.value && useBrand.value ? 'brand' : undefined))
+
 const templateOptions = [
   ...catalogTemplates.map((t) => ({ id: t.id, name: t.name, description: t.description })),
   { id: 'blank', name: 'Página larga', description: 'Una sola página con secciones apiladas. Se edita a mano.' },
@@ -55,10 +60,11 @@ const usingSample = computed(() => activeProducts.value === 0)
 const selectedTemplate = computed(() => catalogTemplates.find((t) => t.id === templateId.value) ?? null)
 const previewTitle = computed(() => name.value.trim() || 'Nombre del catálogo')
 
-// Vista previa con los datos reales del negocio; si aún no hay productos, con datos de ejemplo
+// Vista previa con los datos reales del negocio; si aún no hay productos, con datos de ejemplo.
+// Los datos de ejemplo también llevan el tema de marca, para que "brand" se vea con tus colores.
 const previewData = computed<CatalogDataInput>(() =>
   usingSample.value
-    ? sampleCatalog
+    ? { ...sampleCatalog, brandTheme: organization.value?.brand_theme ?? undefined }
     : toRendererData(organization.value!, allCategories.value, allProducts.value),
 )
 
@@ -86,7 +92,7 @@ async function create() {
   try {
     const org = organization.value!
     const title = name.value.trim()
-    let draft: unknown
+    let draft: Record<string, unknown>
     if (templateId.value === 'blank') {
       draft = starterPage(title)
     } else {
@@ -100,6 +106,9 @@ async function create() {
           .map((p) => ({ id: p.id, categoryId: p.category_id ?? undefined })),
       })
     }
+    // "brand" enlaza el catálogo a los colores del negocio (no guarda una copia)
+    if (themeOverride.value) draft = { ...draft, theme: themeOverride.value }
+
     const { data, error: e } = await supabase
       .from('catalogs')
       .insert({ organization_id: org.id, name: title, slug: slug.value, draft_page: draft })
@@ -136,6 +145,22 @@ async function create() {
         </div>
       </div>
 
+      <label v-if="hasBrand" class="flex items-start gap-2 text-sm">
+        <input v-model="useBrand" type="checkbox" class="mt-1" />
+        <span>
+          <span class="font-medium">Usar los colores de mi negocio</span>
+          <span class="block text-xs text-neutral-500">
+            El catálogo seguirá tus colores de marca: si los cambias en Negocio, se actualiza. Desmárcala para usar
+            los colores propios de la plantilla.
+          </span>
+        </span>
+      </label>
+      <p v-else class="text-xs text-neutral-500">
+        Tip: define los colores de tu marca en
+        <RouterLink :to="{ name: 'settings' }" class="underline">Negocio</RouterLink>
+        y podrás usarlos en todos tus catálogos desde aquí.
+      </p>
+
       <fieldset>
         <legend class="label">Plantilla</legend>
         <div class="grid gap-2 md:grid-cols-2">
@@ -156,6 +181,7 @@ async function create() {
               :title="previewTitle"
               :subtitle="organization?.business.tagline"
               :data="previewData"
+              :theme="themeOverride"
               cover-only
               :width="72"
             />
@@ -169,6 +195,7 @@ async function create() {
             :title="previewTitle"
             :subtitle="organization?.business.tagline"
             :data="previewData"
+            :theme="themeOverride"
           />
           <p class="text-xs text-neutral-500">
             <template v-if="usingSample">
