@@ -59,6 +59,8 @@ const FIELD_LABELS: Record<string, string> = {
   text: 'Texto',
   showDots: 'Puntos guía entre nombre y precio',
   imageSide: 'Lado de la foto',
+  imageFit: 'Ajuste de la foto (completa / recortada)',
+  imageBg: 'Fondo de la foto (tema / blanco / transparente)',
 }
 const layoutLabel = (l: string) => LAYOUT_LABELS[l] ?? l
 const fieldLabel = (k: string) => FIELD_LABELS[k] ?? k
