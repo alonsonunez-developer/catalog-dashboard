@@ -6,6 +6,7 @@ import { isAdmin, organization } from '../lib/session'
 import { errorMessage } from '../lib/data'
 import ThemeEditor from '../components/ThemeEditor.vue'
 import PageThumb from '../components/PageThumb.vue'
+import StorageCleanup from '../components/StorageCleanup.vue'
 
 const org = organization.value!
 const form = ref({
@@ -162,5 +163,6 @@ const previewPage = computed(() => ({
         </div>
       </div>
     </section>
+    <StorageCleanup v-if="isAdmin" />
   </div>
 </template>
