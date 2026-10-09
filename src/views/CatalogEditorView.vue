@@ -61,6 +61,7 @@ const FIELD_LABELS: Record<string, string> = {
   imageSide: 'Lado de la foto',
   imageFit: 'Ajuste de la foto (completa / recortada)',
   imageBg: 'Fondo de la foto (tema / blanco / transparente)',
+  showCategories: 'Mostrar títulos de categoría',
 }
 const layoutLabel = (l: string) => LAYOUT_LABELS[l] ?? l
 const fieldLabel = (k: string) => FIELD_LABELS[k] ?? k
