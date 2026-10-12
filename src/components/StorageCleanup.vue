@@ -3,13 +3,15 @@ import { computed, ref } from 'vue'
 import { supabase } from '../lib/supabase'
 import { organization } from '../lib/session'
 import { errorMessage } from '../lib/data'
+import { confirmDialog } from '../lib/confirm'
+import { toastRef } from '../lib/toast'
 
 const BUCKET = 'catalog-assets'
 const orphans = ref<{ name: string; size: number }[] | null>(null)
 const scanning = ref(false)
 const cleaning = ref(false)
-const error = ref('')
-const result = ref('')
+const error = toastRef('error')
+const result = toastRef('success')
 
 const totalBytes = computed(() => (orphans.value ?? []).reduce((n, o) => n + Number(o.size), 0))
 const fmtSize = (b: number) => (b >= 1048576 ? `${(b / 1048576).toFixed(1)} MB` : `${Math.max(1, Math.round(b / 1024))} KB`)
@@ -30,7 +32,13 @@ async function scan() {
 async function clean() {
   const list = orphans.value ?? []
   if (!list.length) return
-  if (!confirm(`¿Eliminar ${list.length} archivo(s) sin usar? No se puede deshacer.`)) return
+  const ok = await confirmDialog({
+    title: 'Eliminar archivos sin usar',
+    message: `Se eliminarán ${list.length} archivo(s) sin usar (${fmtSize(totalBytes.value)}). Esta acción no se puede deshacer.`,
+    confirmText: 'Eliminar',
+    danger: true,
+  })
+  if (!ok) return
   cleaning.value = true
   error.value = ''
   let deleted = 0

@@ -12,6 +12,8 @@ import {
 } from '../lib/data'
 import { ACCEPT_ATTR, deleteStoredImage, uploadProductImage, validateImage } from '../lib/storage'
 import { removeImageBackground } from '../lib/removeBg'
+import { confirmDialog } from '../lib/confirm'
+import { toast, toastRef } from '../lib/toast'
 
 interface Photo {
   key: string
@@ -33,7 +35,7 @@ const defs = computed(() => organization.value!.attribute_defs ?? [])
 const products = ref<Product[]>([])
 const categories = ref<Category[]>([])
 const loading = ref(true)
-const error = ref('')
+const error = toastRef('error')
 const showForm = ref(false)
 const saving = ref(false)
 
@@ -271,6 +273,7 @@ async function save() {
     for (const old of f.originalPhotos) if (!keep.has(old)) await deleteStoredImage(old)
     revokePreviews()
     showForm.value = false
+    toast.success(f.id ? 'Producto actualizado.' : 'Producto creado.')
     await load()
   } catch (e) {
     error.value = errorMessage(e)
@@ -281,7 +284,13 @@ async function save() {
 }
 
 async function remove(p: Product) {
-  if (!confirm(`¿Eliminar "${p.name}"?`)) return
+  const ok = await confirmDialog({
+    title: 'Eliminar producto',
+    message: `¿Eliminar "${p.name}"? También se borrarán sus fotos. Esta acción no se puede deshacer.`,
+    confirmText: 'Eliminar',
+    danger: true,
+  })
+  if (!ok) return
   error.value = ''
   const { error: e } = await supabase.from('products').delete().eq('id', p.id)
   if (e) {
@@ -289,6 +298,7 @@ async function remove(p: Product) {
     return
   }
   for (const u of storedPhotos(p)) await deleteStoredImage(u)
+  toast.success('Producto eliminado.')
   await load()
 }
 </script>

@@ -16,6 +16,7 @@ import {
   type Product,
 } from '../lib/data'
 import TemplatePreview from '../components/TemplatePreview.vue'
+import { toastRef } from '../lib/toast'
 
 interface CatalogRow {
   id: string
@@ -32,7 +33,7 @@ const catalogs = ref<CatalogRow[]>([])
 const allProducts = ref<Product[]>([])
 const allCategories = ref<Category[]>([])
 const loading = ref(true)
-const error = ref('')
+const error = toastRef('error')
 
 const name = ref('')
 const slug = ref('')

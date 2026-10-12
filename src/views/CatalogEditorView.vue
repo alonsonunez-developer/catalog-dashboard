@@ -24,6 +24,8 @@ import ShareCard from '../components/ShareCard.vue'
 import ThemeEditor from '../components/ThemeEditor.vue'
 import { useTextHistory } from '../lib/useHistory'
 import { ACCEPT_ATTR, uploadImage, validateImage } from '../lib/storage'
+import { confirmDialog } from '../lib/confirm'
+import { toastRef } from '../lib/toast'
 
 type PageV2 = Extract<Page, { version: 2 }>
 
@@ -85,8 +87,8 @@ const allProducts = ref<Product[]>([])
 
 const saving = ref(false)
 const publishing = ref(false)
-const error = ref('')
-const notice = ref('')
+const error = toastRef('error')
+const notice = toastRef('success')
 
 const mode = ref<'visual' | 'json'>('visual')
 const selected = ref(0)
@@ -221,7 +223,7 @@ const hasImageField = computed(() => allFields.value.some((f) => f.key === 'imag
 const coverImage = computed(() => (typeof entry.value?.props.image === 'string' ? entry.value.props.image : ''))
 
 const uploadingImage = ref(false)
-const imageError = ref('')
+const imageError = toastRef('error')
 
 async function onCoverFile(ev: Event) {
   const input = ev.target as HTMLInputElement
@@ -274,12 +276,19 @@ function onAddPage() {
   select(at)
 }
 
-function onRemovePage() {
+async function onRemovePage() {
   if (!v2.value || !entry.value) return
-  if (!confirm(`¿Eliminar la página ${selected.value + 1} (${layoutLabel(entry.value.layout)})?`)) return
-  const next = removePage(v2.value, selected.value)
+  const index = selected.value
+  const ok = await confirmDialog({
+    title: 'Eliminar página',
+    message: `¿Eliminar la página ${index + 1} (${layoutLabel(entry.value.layout)})? Podrás recuperarla con Deshacer.`,
+    confirmText: 'Eliminar',
+    danger: true,
+  })
+  if (!ok || !v2.value) return
+  const next = removePage(v2.value, index)
   update(next)
-  select(Math.max(0, Math.min(selected.value, next.pages.length - 1)))
+  select(Math.max(0, Math.min(index, next.pages.length - 1)))
 }
 
 function onMovePage(delta: number) {
@@ -455,7 +464,13 @@ onBeforeRouteLeave(async () => {
     await saveDraft(true)
   }
   if (!hasUnsaved.value) return true
-  return confirm('Tienes cambios sin guardar. ¿Salir de todas formas?')
+  return confirmDialog({
+    title: 'Cambios sin guardar',
+    message: 'Tienes cambios sin guardar. Si sales ahora, se perderán.',
+    confirmText: 'Salir sin guardar',
+    cancelText: 'Seguir editando',
+    danger: true,
+  })
 })
 
 // Guarda el borrador y abre la vista de impresión en otra pestaña

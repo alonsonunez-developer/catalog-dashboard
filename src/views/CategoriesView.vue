@@ -3,12 +3,14 @@ import { onMounted, ref } from 'vue'
 import { supabase } from '../lib/supabase'
 import { canEdit, organization } from '../lib/session'
 import { errorMessage, fetchCategories, type Category } from '../lib/data'
+import { confirmDialog } from '../lib/confirm'
+import { toast, toastRef } from '../lib/toast'
 
 const orgId = () => organization.value!.id
 const categories = ref<Category[]>([])
 const newName = ref('')
 const loading = ref(true)
-const error = ref('')
+const error = toastRef('error')
 
 async function load() {
   try {
@@ -33,6 +35,7 @@ async function add() {
     return
   }
   newName.value = ''
+  toast.success('Categoría agregada.')
   await load()
 }
 
@@ -51,13 +54,21 @@ async function rename(c: Category, ev: Event) {
     return
   }
   c.name = name
+  toast.success('Categoría renombrada.')
 }
 
 async function remove(c: Category) {
-  if (!confirm(`¿Eliminar la categoría "${c.name}"? Sus productos quedarán sin categoría.`)) return
+  const ok = await confirmDialog({
+    title: 'Eliminar categoría',
+    message: `¿Eliminar la categoría "${c.name}"? Sus productos quedarán sin categoría.`,
+    confirmText: 'Eliminar',
+    danger: true,
+  })
+  if (!ok) return
   error.value = ''
   const { error: e } = await supabase.from('categories').delete().eq('id', c.id)
   if (e) error.value = errorMessage(e)
+  else toast.success('Categoría eliminada.')
   await load()
 }
 </script>

@@ -4,11 +4,13 @@ import { supabase } from '../lib/supabase'
 import { isAdmin, organization } from '../lib/session'
 import { errorMessage } from '../lib/data'
 import { ACCEPT_ATTR, deleteStoredImage, uploadImage, validateImage } from '../lib/storage'
+import { confirmDialog } from '../lib/confirm'
+import { toastRef } from '../lib/toast'
 
 const logo = computed(() => organization.value?.business.logo ?? '')
 const busy = ref(false)
-const error = ref('')
-const done = ref('')
+const error = toastRef('error')
+const done = toastRef('success')
 
 // Guarda (o quita) el logo dentro de los datos del negocio, conservando el resto
 async function saveLogo(url: string | null) {
@@ -52,7 +54,13 @@ async function onFile(ev: Event) {
 }
 
 async function remove() {
-  if (!confirm('¿Quitar el logo? Dejará de aparecer en tus catálogos.')) return
+  const ok = await confirmDialog({
+    title: 'Quitar logo',
+    message: 'Dejará de aparecer en tus catálogos.',
+    confirmText: 'Quitar',
+    danger: true,
+  })
+  if (!ok) return
   error.value = ''
   done.value = ''
   busy.value = true

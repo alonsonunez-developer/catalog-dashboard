@@ -3,13 +3,15 @@ import { ref } from 'vue'
 import { supabase } from '../lib/supabase'
 import { isAdmin, organization, type AttributeDef } from '../lib/session'
 import { attributeKey, errorMessage } from '../lib/data'
+import { confirmDialog } from '../lib/confirm'
+import { toast, toastRef } from '../lib/toast'
 
 const org = organization.value!
 const defs = ref<AttributeDef[]>(org.attribute_defs.map((d) => ({ ...d })))
 const newLabel = ref('')
 const newType = ref<'text' | 'list'>('list')
 const saving = ref(false)
-const error = ref('')
+const error = toastRef('error')
 const saved = ref(false)
 
 const presets = [
@@ -37,8 +39,14 @@ function addPreset(items: { label: string; type: 'text' | 'list' }[]) {
   items.forEach((i) => addDef(i.label, i.type))
 }
 
-function remove(d: AttributeDef) {
-  if (!confirm(`¿Quitar "${d.label}"? Los valores ya guardados en los productos no se borran, pero dejarán de mostrarse.`)) return
+async function remove(d: AttributeDef) {
+  const ok = await confirmDialog({
+    title: 'Quitar atributo',
+    message: `¿Quitar "${d.label}"? Los valores ya guardados en los productos no se borran, pero dejarán de mostrarse.`,
+    confirmText: 'Quitar',
+    danger: true,
+  })
+  if (!ok) return
   defs.value = defs.value.filter((x) => x.key !== d.key)
   saved.value = false
 }
@@ -56,7 +64,7 @@ async function save() {
   }
   defs.value = clean
   organization.value = { ...organization.value!, attribute_defs: clean }
-  saved.value = true
+  toast.success('Atributos guardados.')
 }
 </script>
 

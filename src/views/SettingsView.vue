@@ -8,6 +8,7 @@ import ThemeEditor from '../components/ThemeEditor.vue'
 import PageThumb from '../components/PageThumb.vue'
 import StorageCleanup from '../components/StorageCleanup.vue'
 import LogoUpload from '../components/LogoUpload.vue'
+import { toast, toastRef } from '../lib/toast'
 
 const org = organization.value!
 const form = ref({
@@ -21,7 +22,7 @@ const form = ref({
   address: org.business.address ?? '',
 })
 const saving = ref(false)
-const error = ref('')
+const error = toastRef('error')
 const saved = ref(false)
 
 const businessFields = [
@@ -61,13 +62,13 @@ async function save() {
     currency: f.currency.trim().toUpperCase(),
     business,
   }
-  saved.value = true
+  toast.success('Datos del negocio guardados.')
 }
 
 // ===== Tema del negocio =====
 const brandDraft = ref<Theme | null>(org.brand_theme ?? null)
 const savingBrand = ref(false)
-const brandError = ref('')
+const brandError = toastRef('error')
 const brandSaved = ref(false)
 
 function onBrandChange(value: string | Theme) {
@@ -91,7 +92,7 @@ async function saveBrand(theme: Theme | null) {
   }
   brandDraft.value = theme
   organization.value = { ...organization.value!, brand_theme: theme }
-  brandSaved.value = true
+  toast.success(theme ? 'Colores de marca guardados.' : 'Colores de marca quitados.')
 }
 
 // Vista previa con datos de ejemplo
