@@ -11,12 +11,17 @@ import {
   type Product,
 } from '../lib/data'
 import { ACCEPT_ATTR, deleteStoredImage, uploadProductImage, validateImage } from '../lib/storage'
+import { removeImageBackground } from '../lib/removeBg'
 
 interface Photo {
   key: string
   url: string // URL ya guardada ('' si todavía es un archivo por subir)
   file: File | null
   preview: string
+  // Estado anterior a quitar el fondo, para poder restaurarlo
+  backup: { url: string; file: File | null; preview: string } | null
+  busy: boolean
+  progress: number
 }
 
 const MAX_PHOTOS = 8 // la principal + 7 en la galería (coincide con el límite de la base)
@@ -50,10 +55,20 @@ const emptyForm = () => ({
 })
 const form = ref(emptyForm())
 
+function revokePhoto(p: Photo) {
+  if (p.file) URL.revokeObjectURL(p.preview)
+  if (p.backup?.file) URL.revokeObjectURL(p.backup.preview)
+}
 function revokePreviews() {
-  form.value.photos.forEach((p) => p.file && URL.revokeObjectURL(p.preview))
+  form.value.photos.forEach(revokePhoto)
 }
 onBeforeUnmount(revokePreviews)
+
+const anyBusy = computed(() => form.value.photos.some((p) => p.busy))
+
+function newPhoto(url: string, file: File | null, preview: string): Photo {
+  return { key: newKey(), url, file, preview, backup: null, busy: false, progress: 0 }
+}
 
 function onFiles(ev: Event) {
   const input = ev.target as HTMLInputElement
@@ -70,13 +85,13 @@ function onFiles(ev: Event) {
       error.value = invalid
       continue
     }
-    form.value.photos.push({ key: newKey(), url: '', file, preview: URL.createObjectURL(file) })
+    form.value.photos.push(newPhoto('', file, URL.createObjectURL(file)))
   }
 }
 
 function removePhoto(i: number) {
   const [p] = form.value.photos.splice(i, 1)
-  if (p?.file) URL.revokeObjectURL(p.preview)
+  if (p) revokePhoto(p)
 }
 
 function movePhoto(i: number, delta: number) {
@@ -90,6 +105,53 @@ function makeMain(i: number) {
   const list = form.value.photos
   const [p] = list.splice(i, 1)
   list.unshift(p)
+}
+
+// ===== Quitar fondo =====
+async function removeBg(ph: Photo) {
+  if (ph.busy) return
+  error.value = ''
+  ph.busy = true
+  ph.progress = 0
+  try {
+    // Foto nueva: el archivo elegido. Foto guardada: se descarga de su URL.
+    const source: Blob = ph.file ?? (await (await fetch(ph.url)).blob())
+    const blob = await removeImageBackground(source, (pct) => {
+      ph.progress = pct
+    })
+    // Si mientras tanto se quitó la foto o se cerró el formulario, se descarta el resultado
+    if (!form.value.photos.some((p) => p.key === ph.key)) return
+    const file = new File([blob], 'sin-fondo.png', { type: 'image/png' })
+    if (ph.backup?.file) URL.revokeObjectURL(ph.backup.preview)
+    // El primer original se conserva aunque se procese varias veces
+    const backup = ph.backup ?? { url: ph.url, file: ph.file, preview: ph.preview }
+    if (ph.backup && ph.file) URL.revokeObjectURL(ph.preview)
+    ph.backup = backup
+    ph.url = ''
+    ph.file = file
+    ph.preview = URL.createObjectURL(file)
+  } catch (e) {
+    error.value = `No se pudo quitar el fondo: ${errorMessage(e)}`
+  } finally {
+    ph.busy = false
+  }
+}
+
+function restoreOriginal(ph: Photo) {
+  if (!ph.backup || ph.busy) return
+  if (ph.file) URL.revokeObjectURL(ph.preview)
+  ph.url = ph.backup.url
+  ph.file = ph.backup.file
+  ph.preview = ph.backup.preview
+  ph.backup = null
+}
+
+const checker = {
+  backgroundColor: '#ffffff',
+  backgroundImage:
+    'linear-gradient(45deg,#e5e5e5 25%,transparent 25%),linear-gradient(-45deg,#e5e5e5 25%,transparent 25%),linear-gradient(45deg,transparent 75%,#e5e5e5 75%),linear-gradient(-45deg,transparent 75%,#e5e5e5 75%)',
+  backgroundSize: '16px 16px',
+  backgroundPosition: '0 0, 0 8px, 8px -8px, -8px 0',
 }
 
 const categoryName = computed(() => new Map(categories.value.map((c) => [c.id, c.name])))
@@ -134,7 +196,7 @@ function edit(p: Product) {
     compare_at_price: p.compare_at_price ?? '',
     sku: p.sku ?? '',
     description: p.description ?? '',
-    photos: urls.map((url) => ({ key: newKey(), url, file: null, preview: url })),
+    photos: urls.map((url) => newPhoto(url, null, url)),
     originalPhotos: urls,
     category_id: p.category_id ?? '',
     is_active: p.is_active,
@@ -163,6 +225,10 @@ function buildAttributes(): Record<string, AttributeValue> {
 async function save() {
   error.value = ''
   const f = form.value
+  if (anyBusy.value) {
+    error.value = 'Espera a que termine de quitarse el fondo de las fotos.'
+    return
+  }
   const compareAt = f.compare_at_price === '' || f.compare_at_price == null ? null : Number(f.compare_at_price)
   if (compareAt !== null && compareAt < f.price) {
     error.value = 'El precio anterior debe ser mayor o igual al precio actual (o déjalo vacío).'
@@ -200,7 +266,7 @@ async function save() {
     if (e) throw e
 
     uploaded.length = 0 // ya están en uso: no se limpian
-    // Las fotos quitadas se borran de Storage solo después de guardar bien
+    // Las fotos quitadas o reemplazadas se borran de Storage solo después de guardar bien
     const keep = new Set(urls)
     for (const old of f.originalPhotos) if (!keep.has(old)) await deleteStoredImage(old)
     revokePreviews()
@@ -264,20 +330,54 @@ async function remove(p: Product) {
         <label class="label" for="p-files">Fotos ({{ form.photos.length }}/{{ MAX_PHOTOS }})</label>
         <ul v-if="form.photos.length" class="mb-2 grid grid-cols-2 gap-2 sm:grid-cols-4">
           <li v-for="(ph, i) in form.photos" :key="ph.key" class="space-y-1 rounded-md border border-neutral-200 p-1.5">
-            <div class="relative">
-              <img :src="ph.preview" alt="" class="aspect-square w-full rounded object-cover" />
+            <div class="relative aspect-square w-full overflow-hidden rounded" :style="checker">
+              <img :src="ph.preview" alt="" class="h-full w-full object-contain" />
               <span
                 v-if="i === 0"
                 class="absolute left-1 top-1 rounded bg-neutral-900 px-1.5 py-0.5 text-[10px] text-white"
               >
                 Principal
               </span>
+              <span
+                v-if="ph.backup && !ph.busy"
+                class="absolute bottom-1 left-1 rounded bg-green-700 px-1.5 py-0.5 text-[10px] text-white"
+              >
+                Sin fondo
+              </span>
+              <div
+                v-if="ph.busy"
+                class="absolute inset-0 flex flex-col items-center justify-center gap-1 bg-white/80 text-xs text-neutral-700"
+              >
+                <span>Quitando fondo…</span>
+                <span v-if="ph.progress">{{ ph.progress }}%</span>
+                <span class="px-2 text-center text-[10px] text-neutral-500">La primera vez descarga el modelo</span>
+              </div>
             </div>
             <div class="flex flex-wrap gap-1">
               <button type="button" class="btn btn-secondary !px-1.5 !py-0.5" :disabled="i === 0" title="Mover antes" @click="movePhoto(i, -1)">←</button>
               <button type="button" class="btn btn-secondary !px-1.5 !py-0.5" :disabled="i === form.photos.length - 1" title="Mover después" @click="movePhoto(i, 1)">→</button>
               <button v-if="i > 0" type="button" class="btn btn-secondary !px-1.5 !py-0.5 text-xs" @click="makeMain(i)">Principal</button>
               <button type="button" class="btn btn-danger !px-1.5 !py-0.5" title="Quitar foto" @click="removePhoto(i)">✕</button>
+            </div>
+            <div class="flex flex-wrap gap-1">
+              <button
+                v-if="!ph.backup"
+                type="button"
+                class="btn btn-secondary !px-1.5 !py-0.5 text-xs"
+                :disabled="ph.busy || saving"
+                @click="removeBg(ph)"
+              >
+                Quitar fondo
+              </button>
+              <button
+                v-else
+                type="button"
+                class="btn btn-secondary !px-1.5 !py-0.5 text-xs"
+                :disabled="ph.busy || saving"
+                @click="restoreOriginal(ph)"
+              >
+                Restaurar original
+              </button>
             </div>
           </li>
         </ul>
@@ -292,6 +392,7 @@ async function remove(p: Product) {
         />
         <p class="mt-1 text-xs text-neutral-500">
           JPG, PNG o WebP. La primera es la principal; las demás forman la galería. Se optimizan al guardar.
+          «Quitar fondo» funciona mejor con productos de contorno claro sobre un fondo liso.
         </p>
       </div>
 
@@ -321,7 +422,7 @@ async function remove(p: Product) {
         <input v-model="form.is_active" type="checkbox" /> Visible en el catálogo
       </label>
       <div class="flex gap-2 md:col-span-2">
-        <button class="btn btn-primary" :disabled="saving">{{ saving ? 'Guardando…' : 'Guardar' }}</button>
+        <button class="btn btn-primary" :disabled="saving || anyBusy">{{ saving ? 'Guardando…' : 'Guardar' }}</button>
         <button type="button" class="btn btn-secondary" :disabled="saving" @click="cancel">Cancelar</button>
       </div>
     </form>
