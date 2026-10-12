@@ -7,6 +7,7 @@ import { errorMessage } from '../lib/data'
 import ThemeEditor from '../components/ThemeEditor.vue'
 import PageThumb from '../components/PageThumb.vue'
 import StorageCleanup from '../components/StorageCleanup.vue'
+import LogoUpload from '../components/LogoUpload.vue'
 
 const org = organization.value!
 const form = ref({
@@ -42,6 +43,9 @@ async function save() {
     const v = f[key].trim()
     if (v) business[key] = v
   }
+  // El logo se administra aparte (LogoUpload): se conserva al guardar estos datos
+  const logo = organization.value!.business.logo
+  if (logo) business.logo = logo
   const { error: e } = await supabase
     .from('organizations')
     .update({ name: f.name.trim(), currency: f.currency.trim().toUpperCase(), business })
@@ -128,6 +132,7 @@ const previewPage = computed(() => ({
       <button v-if="isAdmin" class="btn btn-primary" :disabled="saving">{{ saving ? 'Guardando…' : 'Guardar' }}</button>
     </form>
 
+    <LogoUpload />
     <section class="card space-y-3">
       <h2 class="text-xl font-semibold">Colores de tu marca</h2>
       <p class="text-sm text-neutral-600">

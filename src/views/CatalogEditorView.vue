@@ -196,6 +196,19 @@ function setDisplay(value: string) {
   update({ ...v2.value, display: value === 'double' ? 'double' : 'single' })
 }
 
+function setShowLogo(value: boolean) {
+  if (!v2.value) return
+  update({ ...v2.value, showLogo: value ? true : undefined })
+}
+
+function setHideLogo(value: boolean) {
+  if (!v2.value) return
+  update({
+    ...v2.value,
+    pages: v2.value.pages.map((p, i) => (i === selected.value ? { ...p, hideLogo: value ? true : undefined } : p)),
+  })
+}
+
 // ===== Páginas =====
 const layouts = pageLayouts()
 const entry = computed(() => v2.value?.pages[selected.value] ?? null)
@@ -521,6 +534,19 @@ async function publish() {
           <option value="double">2 páginas (pantallas anchas)</option>
         </select>
       </div>
+      <label
+        v-if="v2"
+        class="flex items-center gap-1 text-sm"
+        :title="organization?.business.logo ? '' : 'Sube tu logo en Negocio para poder mostrarlo'"
+      >
+        <input
+          type="checkbox"
+          :checked="v2.showLogo === true"
+          :disabled="!canEdit || (!organization?.business.logo && v2.showLogo !== true)"
+          @change="setShowLogo(($event.target as HTMLInputElement).checked)"
+        />
+        Mostrar logo en las páginas
+      </label>
       <div class="flex overflow-hidden rounded-md border border-neutral-300 text-sm">
         <button
           type="button"
@@ -637,7 +663,16 @@ async function publish() {
           <p class="mt-1 text-xs text-neutral-500">{{ info?.description }}</p>
         </div>
 
-                <div v-if="hasImageField" class="space-y-2">
+        <label v-if="v2.showLogo" class="flex items-center gap-2 text-sm">
+          <input
+            type="checkbox"
+            :checked="entry.hideLogo === true"
+            :disabled="!canEdit"
+            @change="setHideLogo(($event.target as HTMLInputElement).checked)"
+          />
+          Ocultar el logo en esta página
+        </label>
+        <div v-if="hasImageField" class="space-y-2">
           <label class="label" for="f-image-file">Imagen de fondo</label>
           <div class="flex items-center gap-3">
             <img v-if="coverImage" :src="coverImage" alt="" class="h-16 w-16 rounded object-cover" />

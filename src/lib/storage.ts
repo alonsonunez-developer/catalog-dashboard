@@ -7,11 +7,12 @@ const ACCEPTED = ['image/jpeg', 'image/png', 'image/webp']
 
 export const ACCEPT_ATTR = ACCEPTED.join(',')
 
-// Reduce la imagen a 1600 px y la convierte a WebP. Si algo falla, devuelve el original.
-async function prepare(file: File): Promise<File> {
+// Reduce la imagen a "maxSide" px y la convierte a WebP (conserva la transparencia).
+// Si algo falla, devuelve el original.
+async function prepare(file: File, maxSide: number): Promise<File> {
   try {
     const bitmap = await createImageBitmap(file)
-    const scale = Math.min(1, MAX_SIDE / Math.max(bitmap.width, bitmap.height))
+    const scale = Math.min(1, maxSide / Math.max(bitmap.width, bitmap.height))
     const canvas = document.createElement('canvas')
     canvas.width = Math.round(bitmap.width * scale)
     canvas.height = Math.round(bitmap.height * scale)
@@ -29,10 +30,10 @@ export function validateImage(file: File): string | null {
   return ACCEPTED.includes(file.type) ? null : 'Usa una imagen JPG, PNG o WebP.'
 }
 
-export async function uploadProductImage(orgId: string, original: File): Promise<string> {
+export async function uploadProductImage(orgId: string, original: File, maxSide = MAX_SIDE): Promise<string> {
   const invalid = validateImage(original)
   if (invalid) throw new Error(invalid)
-  const file = await prepare(original)
+  const file = await prepare(original, maxSide)
   if (file.size > MAX_BYTES) throw new Error('La imagen pesa más de 5 MB incluso después de optimizarla.')
 
   const ext = file.type === 'image/webp' ? 'webp' : file.type === 'image/png' ? 'png' : 'jpg'
@@ -44,6 +45,9 @@ export async function uploadProductImage(orgId: string, original: File): Promise
   return supabase.storage.from(BUCKET).getPublicUrl(path).data.publicUrl
 }
 
+// La subida no es específica de productos: se usa también para portadas y para el logo
+export const uploadImage = uploadProductImage
+
 // Solo borra imágenes que están en nuestro bucket; las URLs externas se ignoran
 export async function deleteStoredImage(url: string | null | undefined) {
   if (!url) return
@@ -54,6 +58,3 @@ export async function deleteStoredImage(url: string | null | undefined) {
   const { error } = await supabase.storage.from(BUCKET).remove([path])
   if (error) console.error('No se pudo borrar la imagen', error)
 }
-
-// La subida no es específica de productos: se usa también para la portada
-export const uploadImage = uploadProductImage

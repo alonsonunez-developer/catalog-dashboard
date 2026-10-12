@@ -108,6 +108,8 @@ async function create() {
     }
     // "brand" enlaza el catálogo a los colores del negocio (no guarda una copia)
     if (themeOverride.value) draft = { ...draft, theme: themeOverride.value }
+        // Si el negocio ya tiene logo, el catálogo nuevo lo muestra (se puede apagar en el editor)
+    if (templateId.value !== 'blank' && org.business.logo) draft = { ...draft, showLogo: true }
 
     const { data, error: e } = await supabase
       .from('catalogs')
