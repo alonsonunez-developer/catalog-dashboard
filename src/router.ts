@@ -18,12 +18,14 @@ const router = createRouter({
         { path: 'categories', name: 'categories', component: () => import('./views/CategoriesView.vue') },
         { path: 'attributes', name: 'attributes', component: () => import('./views/AttributesView.vue') },
         { path: 'settings', name: 'settings', component: () => import('./views/SettingsView.vue') },
+        { path: '/reset-password', name: 'reset-password', component: () => import('./views/ResetPasswordView.vue'), meta: { public: true } },
       ],
     },
   ],
 })
 
 router.beforeEach((to) => {
+  if (to.name === 'reset-password') return true
   if (!session.value) return to.meta.public ? true : { name: 'login' }
   if (to.name === 'login') return { name: organization.value ? 'catalogs' : 'onboarding' }
   if (!organization.value) return to.name === 'onboarding' ? true : { name: 'onboarding' }

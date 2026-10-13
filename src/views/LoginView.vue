@@ -17,6 +17,7 @@ const loading = ref(false)
 const googleLoading = ref(false)
 const error = ref('')
 const info = ref('')
+const forgot = ref(false)
 
 const isSignup = computed(() => mode.value === 'signup')
 const mismatch = computed(() => isSignup.value && confirm.value !== '' && confirm.value !== password.value)
@@ -30,6 +31,7 @@ function setMode(m: 'signin' | 'signup') {
   showPassword.value = false
   error.value = ''
   info.value = ''
+  forgot.value = false
 }
 
 // Mensajes de Supabase en español para los casos más comunes
@@ -119,6 +121,28 @@ async function signInWithGoogle() {
   // Si todo sale bien, el navegador se va a Google y regresa con la sesión iniciada
 }
 
+async function sendReset() {
+  error.value = ''
+  info.value = ''
+  const value = email.value.trim()
+  if (!value) {
+    error.value = 'Escribe tu correo para enviarte el enlace.'
+    return
+  }
+  loading.value = true
+  const { error: e } = await supabase.auth.resetPasswordForEmail(value, {
+    redirectTo: `${window.location.origin}/reset-password`,
+  })
+  loading.value = false
+  if (e) {
+    error.value = friendly(e)
+    return
+  }
+  // Mismo mensaje exista o no la cuenta, para no revelar qué correos están registrados
+  info.value = 'Si ese correo tiene una cuenta, te enviamos un enlace para cambiar la contraseña. Revisa tu bandeja.'
+  forgot.value = false
+}
+
 // Si el usuario vuelve con el botón Atrás desde Google, el botón no debe quedar bloqueado
 const onPageShow = (ev: PageTransitionEvent) => {
   if (ev.persisted) googleLoading.value = false
@@ -136,6 +160,10 @@ onMounted(() => {
       : `No se pudo iniciar sesión con Google: ${reason}`
     history.replaceState({}, '', window.location.pathname)
   }
+  if (params.get('reset') === '1') {
+    info.value = 'Contraseña actualizada. Inicia sesión con la nueva.'
+    history.replaceState({}, '', window.location.pathname)
+  }
 })
 onBeforeUnmount(() => window.removeEventListener('pageshow', onPageShow))
 </script>
@@ -143,7 +171,7 @@ onBeforeUnmount(() => window.removeEventListener('pageshow', onPageShow))
 <template>
   <div class="flex min-h-screen items-center justify-center bg-neutral-50 p-4">
     <div class="card w-full max-w-sm space-y-4">
-      <div class="flex rounded-md bg-neutral-100 p-1 text-sm" role="tablist">
+      <div v-if="!forgot" class="flex rounded-md bg-neutral-100 p-1 text-sm" role="tablist">
         <button
           type="button"
           role="tab"
@@ -168,7 +196,7 @@ onBeforeUnmount(() => window.removeEventListener('pageshow', onPageShow))
 
       <h1 class="text-xl font-semibold">{{ isSignup ? 'Crea tu cuenta' : 'Bienvenido de nuevo' }}</h1>
 
-      <button type="button" class="btn btn-secondary w-full gap-2" :disabled="busy" @click="signInWithGoogle">
+      <button v-if="!forgot" type="button" class="btn btn-secondary w-full gap-2" :disabled="busy" @click="signInWithGoogle">
         <svg class="h-4 w-4" viewBox="0 0 48 48" aria-hidden="true">
           <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z" />
           <path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z" />
@@ -178,13 +206,26 @@ onBeforeUnmount(() => window.removeEventListener('pageshow', onPageShow))
         {{ googleLoading ? 'Conectando con Google…' : 'Continuar con Google' }}
       </button>
 
-      <div class="flex items-center gap-3 text-xs text-neutral-400">
+      <div v-if="!forgot" class="flex items-center gap-3 text-xs text-neutral-400">
         <span class="h-px flex-1 bg-neutral-200" />
         o con tu correo
         <span class="h-px flex-1 bg-neutral-200" />
       </div>
 
-      <form class="space-y-4" @submit.prevent="submit">
+      <form v-if="forgot" class="space-y-4" @submit.prevent="sendReset">
+        <p class="text-sm text-neutral-600">Escribe tu correo y te enviaremos un enlace para elegir una contraseña nueva.</p>
+        <div>
+          <label class="label" for="email-reset">Correo</label>
+          <input id="email-reset" v-model="email" type="email" class="input" required autocomplete="email" />
+        </div>
+        <p v-if="error" class="text-sm text-red-600" role="alert">{{ error }}</p>
+        <button class="btn btn-primary w-full" :disabled="busy">{{ loading ? 'Enviando…' : 'Enviar enlace' }}</button>
+        <button type="button" class="w-full cursor-pointer text-sm text-neutral-600 underline" @click="forgot = false; error = ''">
+          Volver
+        </button>
+      </form>
+
+      <form v-if="!forgot" class="space-y-4" @submit.prevent="submit">
         <div>
           <label class="label" for="email">Correo</label>
           <input id="email" v-model="email" type="email" class="input" required autocomplete="email" />
@@ -213,6 +254,15 @@ onBeforeUnmount(() => window.removeEventListener('pageshow', onPageShow))
           </div>
           <p v-if="isSignup" class="mt-1 text-xs text-neutral-500">Mínimo {{ MIN_PASSWORD }} caracteres.</p>
         </div>
+
+        <button
+          v-if="!isSignup"
+          type="button"
+          class="-mt-2 block cursor-pointer text-xs text-neutral-600 underline"
+          @click="forgot = true; error = ''; info = ''"
+        >
+          ¿Olvidaste tu contraseña?
+        </button>
 
         <div v-if="isSignup">
           <label class="label" for="confirm">Confirmar contraseña</label>
