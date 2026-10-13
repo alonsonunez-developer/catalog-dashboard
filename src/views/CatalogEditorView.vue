@@ -647,7 +647,7 @@ async function publish() {
       <!-- Vista previa de la página seleccionada -->
       <section class="flex justify-center rounded-lg bg-neutral-200 p-4">
         <div class="w-full max-w-[420px] overflow-hidden rounded-lg bg-white shadow">
-          <div class="max-h-[44rem] overflow-auto">
+          <div class="max-h-[44rem] overflow-auto" style="--ck-page-min-h: 44rem">
             <PageRenderer :page="page" :data="rendererData" :only="selected" />
           </div>
         </div>

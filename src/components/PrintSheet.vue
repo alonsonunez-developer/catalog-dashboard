@@ -79,6 +79,7 @@ const background = computed(() => {
 .print-inner {
   transform-origin: top left;
   pointer-events: none;
+  --ck-page-min-h: var(--fill); /* cada página llena la hoja */
 }
 /* Portadas y contacto miden "85vh"/"70vh"; en papel se les da el alto de la hoja */
 .print-inner :deep(section[class*='min-h-']) {

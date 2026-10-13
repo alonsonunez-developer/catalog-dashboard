@@ -31,4 +31,8 @@ const height = computed(() => Math.round(props.width * 1.4))
 .thumb-inner :deep(section[class*='min-h-']) {
   min-height: 520px !important;
 }
+
+.thumb-inner {
+  --ck-page-min-h: 520px;
+}
 </style>
