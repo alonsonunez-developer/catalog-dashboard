@@ -45,6 +45,8 @@ function applyPrintStyle() {
     @media print {
       html, body { margin: 0 !important; background: #fff !important; }
       .no-print { display: none !important; }
+      .print-root { background: none !important; padding: 0 !important; min-height: 0 !important; }
+      .print-wrap { padding: 0 !important; overflow: visible !important; }
     }`
 }
 watch(paper, applyPrintStyle)
@@ -126,7 +128,7 @@ onBeforeUnmount(() => styleEl?.remove())
       Este catálogo es de página larga (versión 1) y no se puede imprimir por hojas. Crea uno con una plantilla para
       poder exportarlo.
     </p>
-    <div v-else-if="data" class="overflow-x-auto pt-4">
+    <div v-else-if="data" class="print-wrap overflow-x-auto pt-4">
       <PrintSheet
         v-for="i in count"
         :key="`${paper}-${i}`"

@@ -81,9 +81,11 @@ const background = computed(() => {
   pointer-events: none;
   --ck-page-min-h: var(--fill); /* cada página llena la hoja */
 }
-/* Portadas y contacto miden "85vh"/"70vh"; en papel se les da el alto de la hoja */
+/* Portadas y contacto: ocupan el espacio que sobra (sin contar la franja del logo),
+   así la página nunca supera la altura de la hoja */
 .print-inner :deep(section[class*='min-h-']) {
-  min-height: var(--fill) !important;
+  min-height: 0 !important;
+  flex: 1 1 auto;
 }
 @media print {
   .sheet {

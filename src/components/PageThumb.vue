@@ -29,7 +29,7 @@ const height = computed(() => Math.round(props.width * 1.4))
 <style scoped>
 /* Las portadas y el contacto miden "85vh"/"70vh" del navegador; en la miniatura se fija una altura de celular */
 .thumb-inner :deep(section[class*='min-h-']) {
-  min-height: 520px !important;
+  min-height: 0 !important; flex: 1 1 auto;
 }
 
 .thumb-inner {
