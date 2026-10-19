@@ -5,6 +5,7 @@ import { PageSchema, pageEntries, type CatalogDataInput } from 'catalog-kit'
 import { supabase } from '../lib/supabase'
 import { organization } from '../lib/session'
 import { errorMessage, fetchCategories, fetchProducts, toRendererData } from '../lib/data'
+import { hdUrl, wantsHd } from '../lib/hdImages'
 import PrintSheet from '../components/PrintSheet.vue'
 
 const print = () => window.print()
@@ -21,6 +22,7 @@ const id = route.params.id as string
 
 const paper = ref<PaperKey>('A3')
 const size = computed(() => PAPERS[paper.value])
+const highRes = ref(true)
 
 const loading = ref(true)
 const ready = ref(false) // imágenes y fuentes cargadas
@@ -30,6 +32,7 @@ const page = ref<unknown>(null)
 const data = ref<CatalogDataInput | null>(null)
 const count = ref(0)
 const paged = ref(true)
+const upgraded = ref(0) // fotos que pasaron a versión alta
 
 // El tamaño de hoja y los colores de impresión se declaran con una hoja de estilos temporal:
 // un @page dentro de un componente seguiría activo al salir de esta pantalla.
@@ -49,7 +52,6 @@ function applyPrintStyle() {
       .print-wrap { padding: 0 !important; overflow: visible !important; }
     }`
 }
-watch(paper, applyPrintStyle)
 
 async function waitForImages() {
   const imgs = Array.from(document.querySelectorAll<HTMLImageElement>('.print-root img'))
@@ -67,8 +69,50 @@ async function waitForImages() {
   )
   await Promise.race([loaded, new Promise((resolve) => setTimeout(resolve, 20000))])
   await document.fonts?.ready
+  if (highRes.value) await Promise.race([upgradeImages(), new Promise((resolve) => setTimeout(resolve, 30000))])
   ready.value = true
 }
+
+// Cambia a la versión de alta resolución las fotos que la hoja muestra grandes y que la normal no cubre a 300 DPI.
+// Si una foto no tiene versión alta (fotos antiguas, imágenes externas), se queda como está.
+async function upgradeImages() {
+  upgraded.value = 0
+  const imgs = Array.from(document.querySelectorAll<HTMLImageElement>('.print-root img'))
+  await Promise.all(
+    imgs.map(async (img) => {
+      if (!img.naturalWidth) return
+      const hd = hdUrl(img.currentSrc || img.src)
+      if (!hd) return
+      // Fotos fuera de su hoja (por ejemplo, las otras del carrusel de la galería) no se imprimen
+      const r = img.getBoundingClientRect()
+      const s = img.closest('.sheet')?.getBoundingClientRect()
+      if (!s || r.right <= s.left || r.left >= s.right) return
+      if (!wantsHd(r.width, img.naturalWidth)) return
+      await new Promise<void>((resolve) => {
+        const probe = new Image()
+        probe.onload = async () => {
+          if (probe.naturalWidth > img.naturalWidth) {
+            img.src = hd
+            await img.decode().catch(() => {})
+            upgraded.value++
+          }
+          resolve()
+        }
+        probe.onerror = () => resolve()
+        probe.src = hd
+      })
+    }),
+  )
+}
+
+// Al cambiar de papel o de resolución las hojas se vuelven a crear: se prepara todo otra vez
+watch([paper, highRes], async () => {
+  applyPrintStyle()
+  if (!data.value || !paged.value) return
+  ready.value = false
+  await nextTick()
+  await waitForImages()
+})
 
 onMounted(async () => {
   applyPrintStyle()
@@ -112,15 +156,26 @@ onBeforeUnmount(() => styleEl?.remove())
       <select id="paper" v-model="paper" class="input !w-auto">
         <option v-for="(p, k) in PAPERS" :key="k" :value="k">{{ p.label }}</option>
       </select>
+      <label class="label !mb-0" for="res">Fotos</label>
+      <select id="res" v-model="highRes" class="input !w-auto">
+        <option :value="true">Alta resolución (300 DPI)</option>
+        <option :value="false">Estándar (más rápido)</option>
+      </select>
       <button class="btn btn-primary" :disabled="!ready" @click="print">
         {{ ready ? 'Imprimir / Guardar PDF' : 'Preparando imágenes…' }}
       </button>
     </div>
 
-    <p v-if="ready" class="no-print mx-auto max-w-3xl px-4 py-3 text-xs text-neutral-700">
-      En el diálogo de impresión elige <b>Guardar como PDF</b> o tu impresora, deja los <b>márgenes en «Ninguno»</b> y
-      activa <b>Gráficos de fondo</b>. Se imprime el borrador guardado ({{ count }} páginas).
-    </p>
+    <div v-if="ready" class="no-print mx-auto max-w-3xl space-y-1 px-4 py-3 text-xs text-neutral-700">
+      <p>
+        En el diálogo de impresión elige <b>Guardar como PDF</b> o tu impresora, deja los <b>márgenes en «Ninguno»</b> y
+        activa <b>Gráficos de fondo</b>. Se imprime el borrador guardado ({{ count }} páginas).
+      </p>
+      <p v-if="highRes">
+        {{ upgraded }} foto(s) en alta resolución. Las fotos subidas antes de esta función, o que ya cubren los 300 DPI
+        en su tamaño, se imprimen con su versión normal; para tener versión alta en las antiguas, vuelve a subirlas.
+      </p>
+    </div>
 
     <p v-if="loading" class="p-6 text-sm">Cargando…</p>
     <p v-else-if="error" class="p-6 text-sm text-red-700">{{ error }}</p>
@@ -131,7 +186,7 @@ onBeforeUnmount(() => styleEl?.remove())
     <div v-else-if="data" class="print-wrap overflow-x-auto pt-4">
       <PrintSheet
         v-for="i in count"
-        :key="`${paper}-${i}`"
+        :key="`${paper}-${highRes}-${i}`"
         :page="page"
         :data="data"
         :index="i - 1"

@@ -36,15 +36,15 @@ describe('deleteStoredImage', () => {
     expect(remove).not.toHaveBeenCalled()
   })
 
-  it('borra solo la ruta dentro del bucket, sin parámetros de la URL', async () => {
+  it('borra la ruta dentro del bucket, sin parámetros de la URL, y también su versión alta', async () => {
     await deleteStoredImage(`${BASE}org-1/abc.webp?v=3`)
     expect(from).toHaveBeenCalledWith('catalog-assets')
-    expect(remove).toHaveBeenCalledWith(['org-1/abc.webp'])
+    expect(remove).toHaveBeenCalledWith(['org-1/abc.webp', 'org-1/abc-hd.webp'])
   })
 
   it('decodifica la ruta', async () => {
     await deleteStoredImage(`${BASE}org%201/a%20b.webp`)
-    expect(remove).toHaveBeenCalledWith(['org 1/a b.webp'])
+    expect(remove).toHaveBeenCalledWith(['org 1/a b.webp', 'org 1/a b-hd.webp'])
   })
 
   it('si Storage falla, lo registra y no lanza', async () => {

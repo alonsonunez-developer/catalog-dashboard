@@ -39,7 +39,7 @@ async function onFile(ev: Event) {
   const previous = logo.value
   let uploaded: string | null = null
   try {
-    uploaded = await uploadImage(organization.value!.id, file, 600)
+    uploaded = await uploadImage(organization.value!.id, file, { maxSide: 600, hd: false })
     await saveLogo(uploaded)
     // El logo anterior se borra solo después de guardar bien
     if (previous) await deleteStoredImage(previous)
