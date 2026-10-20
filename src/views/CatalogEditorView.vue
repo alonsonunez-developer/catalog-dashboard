@@ -43,6 +43,7 @@ const LAYOUT_LABELS: Record<string, string> = {
   ProductGallery: '1 producto con galería',
   PriceList: 'Lista de precios',
   ProductSplit: 'Foto grande + texto (2)',
+  CoverSplit: 'Portada lateral + 2 productos',
 }
 const FIELD_LABELS: Record<string, string> = {
   title: 'Título',
@@ -64,6 +65,7 @@ const FIELD_LABELS: Record<string, string> = {
   imageFit: 'Ajuste de la foto (completa / recortada)',
   imageBg: 'Fondo de la foto (tema / blanco / transparente)',
   showCategories: 'Mostrar títulos de categoría',
+  coverSide: 'Lado de la portada (izquierda / derecha)',
 }
 const layoutLabel = (l: string) => LAYOUT_LABELS[l] ?? l
 const fieldLabel = (k: string) => FIELD_LABELS[k] ?? k
