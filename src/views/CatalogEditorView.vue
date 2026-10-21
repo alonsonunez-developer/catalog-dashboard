@@ -26,6 +26,8 @@ import { useTextHistory } from '../lib/useHistory'
 import { ACCEPT_ATTR, uploadImage, validateImage } from '../lib/storage'
 import { confirmDialog } from '../lib/confirm'
 import { toastRef } from '../lib/toast'
+import EditorMenuBar from '../components/EditorMenuBar.vue'
+import type { Menu } from '../lib/menu'
 
 type PageV2 = Extract<Page, { version: 2 }>
 
@@ -432,6 +434,12 @@ const saveStatus = computed(() => {
 // ===== Atajos, selección y salida de la página =====
 function onKey(e: KeyboardEvent) {
   if (!(e.metaKey || e.ctrlKey) || e.altKey || !canEdit.value) return
+  // Guardar funciona incluso con el foco en un campo de texto, y evita el diálogo del navegador
+  if (e.key.toLowerCase() === 's' && !e.shiftKey) {
+    e.preventDefault()
+    if (hasUnsaved.value && !saving.value && !publishing.value) saveDraft()
+    return
+  }
   // En campos de texto se deja el deshacer nativo del navegador
   const t = e.target as HTMLElement | null
   if (t && (['INPUT', 'TEXTAREA', 'SELECT'].includes(t.tagName) || t.isContentEditable)) return
@@ -504,6 +512,97 @@ async function publish() {
     error.value = errorMessage(err)
   }
 }
+async function copyLink() {
+  try {
+    await navigator.clipboard.writeText(`${viewerUrl}/${slug.value}`)
+    notice.value = 'Enlace copiado.'
+  } catch {
+    error.value = 'No se pudo copiar el enlace automáticamente.'
+  }
+}
+
+const menus = computed<Menu[]>(() => {
+  const edit = canEdit.value
+  const busy = saving.value || publishing.value
+  const pub = status.value === 'published'
+  const doc = v2.value
+  const last = (doc?.pages.length ?? 0) - 1
+  return [
+    {
+      label: 'Archivo',
+      items: [
+        { label: 'Guardar borrador', shortcut: 'Mod+S', action: () => saveDraft(), disabled: !edit || busy || !hasUnsaved.value },
+        {
+          label: 'Guardar y publicar',
+          action: publish,
+          disabled: !edit || busy || sectionProblems.value.length > 0 || !!structureError.value,
+        },
+        { separator: true },
+        { label: 'Imprimir / PDF…', action: openPrint },
+        { separator: true },
+        { label: 'Copiar enlace público', action: copyLink, disabled: !pub },
+        {
+          label: 'Abrir catálogo público',
+          action: () => window.open(`${viewerUrl}/${slug.value}`, '_blank', 'noopener'),
+          disabled: !pub,
+        },
+        { separator: true },
+        { label: 'Autoguardado', checked: autosave.value, action: () => (autosave.value = !autosave.value), disabled: !edit },
+        { separator: true },
+        { label: 'Volver a catálogos', action: () => router.push({ name: 'catalogs' }) },
+      ],
+    },
+    {
+      label: 'Edición',
+      items: [
+        { label: 'Deshacer', shortcut: 'Mod+Z', action: () => undo(), disabled: !edit || !canUndo.value },
+        { label: 'Rehacer', shortcut: 'Mod+Shift+Z', action: () => redo(), disabled: !edit || !canRedo.value },
+        { separator: true },
+        { label: `Agregar página (${layoutLabel(newLayout.value)})`, action: onAddPage, disabled: !edit || !doc || !visual.value },
+        { label: 'Subir página', action: () => onMovePage(-1), disabled: !edit || !doc || !visual.value || selected.value <= 0 },
+        {
+          label: 'Bajar página',
+          action: () => onMovePage(1),
+          disabled: !edit || !doc || !visual.value || selected.value >= last,
+        },
+        { label: 'Eliminar página…', action: onRemovePage, disabled: !edit || !doc || !visual.value },
+        { separator: true },
+        {
+          label: `Agregar productos que faltan (${missing.value.length})`,
+          action: onAddMissing,
+          disabled: !edit || !doc || !visual.value || !missing.value.length,
+        },
+      ],
+    },
+    {
+      label: 'Ver',
+      items: [
+        { label: 'Editor visual', checked: visual.value, action: () => (mode.value = 'visual'), disabled: !canVisual.value },
+        { label: 'JSON avanzado', checked: !visual.value, action: () => (mode.value = 'json') },
+        { separator: true },
+        {
+          label: 'Vista pública: 1 página',
+          checked: !!doc && doc.display !== 'double',
+          action: () => setDisplay('single'),
+          disabled: !edit || !doc,
+        },
+        {
+          label: 'Vista pública: 2 páginas',
+          checked: doc?.display === 'double',
+          action: () => setDisplay('double'),
+          disabled: !edit || !doc,
+        },
+        { separator: true },
+        {
+          label: 'Mostrar logo en todas las páginas',
+          checked: doc?.showLogo === true,
+          action: () => setShowLogo(!(doc?.showLogo === true)),
+          disabled: !edit || !doc || (!organization.value?.business.logo && doc.showLogo !== true),
+        },
+      ],
+    },
+  ]
+})
 </script>
 
 <template>
@@ -530,69 +629,19 @@ async function publish() {
       </a>
     </div>
 
-    <!-- Barra de herramientas -->
-    <div class="flex flex-wrap items-center gap-3">
+    <!-- Barra de menús y herramientas -->
+    <div class="flex flex-wrap items-center gap-3 rounded-md border border-neutral-200 bg-white px-2 py-1.5">
+      <EditorMenuBar :menus="menus" />
+      <span class="h-5 w-px bg-neutral-200" aria-hidden="true" />
       <ThemeEditor
         :model-value="page?.theme"
         :brand="organization?.brand_theme"
         :disabled="!canEdit || !page"
         @update:model-value="setTheme"
       />
-      <div v-if="v2" class="flex items-center gap-2">
-        <label class="label !mb-0" for="display">Vista pública</label>
-        <select
-          id="display"
-          class="input !w-auto"
-          :value="v2.display ?? 'single'"
-          :disabled="!canEdit"
-          @change="setDisplay(($event.target as HTMLSelectElement).value)"
-        >
-          <option value="single">1 página</option>
-          <option value="double">2 páginas (pantallas anchas)</option>
-        </select>
-      </div>
-      <label
-        v-if="v2"
-        class="flex items-center gap-1 text-sm"
-        :title="organization?.business.logo ? '' : 'Sube tu logo en Negocio para poder mostrarlo'"
-      >
-        <input
-          type="checkbox"
-          :checked="v2.showLogo === true"
-          :disabled="!canEdit || (!organization?.business.logo && v2.showLogo !== true)"
-          @change="setShowLogo(($event.target as HTMLInputElement).checked)"
-        />
-        Mostrar logo en las páginas
-      </label>
-      <div class="flex overflow-hidden rounded-md border border-neutral-300 text-sm">
-        <button
-          type="button"
-          class="px-3 py-2"
-          :class="visual ? 'bg-neutral-900 text-white' : 'bg-white'"
-          :disabled="!canVisual"
-          :title="canVisual ? '' : 'Solo disponible para catálogos por páginas con JSON válido'"
-          @click="mode = 'visual'"
-        >
-          Editor visual
-        </button>
-        <button type="button" class="px-3 py-2" :class="!visual ? 'bg-neutral-900 text-white' : 'bg-white'" @click="mode = 'json'">
-          JSON avanzado
-        </button>
-      </div>
-      <button type="button" class="btn btn-secondary" @click="openPrint">Imprimir / PDF</button>
-      <div v-if="canEdit" class="ml-auto flex flex-wrap items-center gap-2">
-        <button type="button" class="btn btn-secondary" :disabled="!canUndo" title="Deshacer (Ctrl/⌘+Z)" @click="undo()">
-          ↶ Deshacer
-        </button>
-        <button type="button" class="btn btn-secondary" :disabled="!canRedo" title="Rehacer (Ctrl/⌘+Shift+Z)" @click="redo()">
-          ↷ Rehacer
-        </button>
-        <label class="flex items-center gap-1 text-xs text-neutral-600">
-          <input v-model="autosave" type="checkbox" /> Autoguardado
-        </label>
-        <button class="btn btn-secondary" :disabled="saving || publishing || !hasUnsaved" @click="saveDraft()">
-          {{ saving ? 'Guardando…' : 'Guardar borrador' }}
-        </button>
+      <div v-if="canEdit" class="ml-auto flex items-center gap-2">
+        <button type="button" class="btn btn-secondary !px-2.5" :disabled="!canUndo" title="Deshacer (Ctrl/⌘+Z)" aria-label="Deshacer" @click="undo()">↶</button>
+        <button type="button" class="btn btn-secondary !px-2.5" :disabled="!canRedo" title="Rehacer (Ctrl/⌘+Shift+Z)" aria-label="Rehacer" @click="redo()">↷</button>
         <button
           class="btn btn-primary"
           :disabled="saving || publishing || sectionProblems.length > 0 || !!structureError"
