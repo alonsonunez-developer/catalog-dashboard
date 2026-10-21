@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { formatShortcut, visibleItems, type MenuItem } from '../src/lib/menu'
+import { sortedByLabel, formatShortcut, visibleItems, type MenuItem } from '../src/lib/menu'
 
 const sep: MenuItem = { separator: true }
 const item = (label: string, extra: Partial<MenuItem> = {}): MenuItem => ({ label, ...extra })
@@ -33,5 +33,23 @@ describe('formatShortcut', () => {
     expect(formatShortcut('Mod+Shift+Z', true)).toBe('⌘⇧Z')
     expect(formatShortcut('Mod+S', false)).toBe('Ctrl+S')
     expect(formatShortcut('Mod+Shift+Z', false)).toBe('Ctrl+Shift+Z')
+  })
+})
+
+describe('sortedByLabel', () => {
+  it('ordena alfabéticamente ignorando mayúsculas y acentos', () => {
+    const out = sortedByLabel([{ label: 'Zeta' }, { label: 'Águila' }, { label: 'Ñandú' }, { label: 'abeja' }])
+    expect(out.map((i) => i.label)).toEqual(['abeja', 'Águila', 'Ñandú', 'Zeta'])
+  })
+
+  it('los números van por su valor y antes que las letras', () => {
+    const out = sortedByLabel([{ label: 'Portada' }, { label: '10 productos' }, { label: '2 productos' }, { label: 'Contacto' }])
+    expect(out.map((i) => i.label)).toEqual(['2 productos', '10 productos', 'Contacto', 'Portada'])
+  })
+
+  it('no modifica la lista original', () => {
+    const original = [{ label: 'b' }, { label: 'a' }]
+    sortedByLabel(original)
+    expect(original.map((i) => i.label)).toEqual(['b', 'a'])
   })
 })

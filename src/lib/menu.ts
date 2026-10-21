@@ -6,6 +6,7 @@ export interface MenuItem {
   checked?: boolean // si está definido, el elemento es una casilla
   hidden?: boolean
   separator?: boolean
+  children?: MenuItem[] // submenú
 }
 export interface Menu {
   label: string
@@ -21,6 +22,13 @@ export function visibleItems(items: MenuItem[]): MenuItem[] {
   }
   while (out.length && out[out.length - 1].separator) out.pop()
   return out
+}
+
+// Orden alfabético en español: ignora mayúsculas y acentos, y los números van por su valor (2 antes que 10)
+export function sortedByLabel<T extends { label?: string }>(items: T[]): T[] {
+  return [...items].sort((a, b) =>
+    (a.label ?? '').localeCompare(b.label ?? '', 'es', { numeric: true, sensitivity: 'base' }),
+  )
 }
 
 export function formatShortcut(shortcut: string, mac: boolean): string {

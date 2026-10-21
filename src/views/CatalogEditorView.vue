@@ -23,11 +23,12 @@ import { errorMessage, fetchCategories, fetchProducts, toRendererData, type Prod
 import ShareCard from '../components/ShareCard.vue'
 import ThemeEditor from '../components/ThemeEditor.vue'
 import { useTextHistory } from '../lib/useHistory'
-import { ACCEPT_ATTR, uploadImage, validateImage } from '../lib/storage'
+import { uploadImage, validateImage } from '../lib/storage'
 import { confirmDialog } from '../lib/confirm'
 import { toastRef } from '../lib/toast'
 import EditorMenuBar from '../components/EditorMenuBar.vue'
-import type { Menu } from '../lib/menu'
+import { sortedByLabel, type Menu } from '../lib/menu'
+import ImageDropzone from '../components/ImageDropzone.vue'
 
 type PageV2 = Extract<Page, { version: 2 }>
 
@@ -229,11 +230,8 @@ const coverImage = computed(() => (typeof entry.value?.props.image === 'string' 
 const uploadingImage = ref(false)
 const imageError = toastRef('error')
 
-async function onCoverFile(ev: Event) {
-  const input = ev.target as HTMLInputElement
-  const file = input.files?.[0]
-  input.value = ''
-  if (!file || !v2.value || !entry.value) return
+async function onCoverFile(file: File) {
+  if (!v2.value || !entry.value) return
   imageError.value = ''
   const invalid = validateImage(file)
   if (invalid) {
@@ -277,6 +275,14 @@ function onAddPage() {
   if (!v2.value) return
   const at = selected.value + 1
   update(addPage(v2.value, newLayout.value, at))
+  select(at)
+}
+
+// Agrega una página con el diseño indicado, después de la seleccionada
+function addPageWithLayout(layout: string) {
+  if (!v2.value) return
+  const at = selected.value + 1
+  update(addPage(v2.value, layout, at))
   select(at)
 }
 
@@ -558,7 +564,11 @@ const menus = computed<Menu[]>(() => {
         { label: 'Deshacer', shortcut: 'Mod+Z', action: () => undo(), disabled: !edit || !canUndo.value },
         { label: 'Rehacer', shortcut: 'Mod+Shift+Z', action: () => redo(), disabled: !edit || !canRedo.value },
         { separator: true },
-        { label: `Agregar página (${layoutLabel(newLayout.value)})`, action: onAddPage, disabled: !edit || !doc || !visual.value },
+        {
+          label: 'Agregar página',
+          disabled: !edit || !doc || !visual.value,
+          children: sortedByLabel(layouts.map((l) => ({ label: layoutLabel(l.name), action: () => addPageWithLayout(l.name) }))),
+        },
         { label: 'Subir página', action: () => onMovePage(-1), disabled: !edit || !doc || !visual.value || selected.value <= 0 },
         {
           label: 'Bajar página',
@@ -738,30 +748,17 @@ const menus = computed<Menu[]>(() => {
           />
           Ocultar el logo en esta página
         </label>
-        <div v-if="hasImageField" class="space-y-2">
-          <label class="label" for="f-image-file">Imagen de fondo</label>
-          <div class="flex items-center gap-3">
-            <img v-if="coverImage" :src="coverImage" alt="" class="h-16 w-16 rounded object-cover" />
-            <div v-else class="flex h-16 w-16 items-center justify-center rounded bg-neutral-100 text-xs text-neutral-400">
-              Sin imagen
-            </div>
-            <div class="space-y-1">
-              <input
-                id="f-image-file"
-                type="file"
-                :accept="ACCEPT_ATTR"
-                class="block text-sm"
-                :disabled="!canEdit || uploadingImage"
-                @change="onCoverFile"
-              />
-              <button v-if="coverImage && canEdit" type="button" class="text-xs text-red-700 underline" @click="setProp('image', '')">
-                Quitar imagen
-              </button>
-            </div>
-          </div>
-          <p v-if="uploadingImage" class="text-xs text-neutral-500">Subiendo imagen…</p>
-          <p v-if="imageError" class="text-xs text-red-600">{{ imageError }}</p>
-          <p class="text-xs text-neutral-500">JPG, PNG o WebP. Se optimiza al subirla. Recuerda guardar el borrador.</p>
+        <div v-if="hasImageField">
+          <p class="label">Imagen de fondo</p>
+          <ImageDropzone
+            :src="coverImage"
+            :busy="uploadingImage"
+            :disabled="!canEdit"
+            hint="JPG, PNG o WebP. Se optimiza al subirla; el autoguardado la conserva en el borrador."
+            @file="onCoverFile"
+            @remove="setProp('image', '')"
+          />
+          <p v-if="imageError" class="mt-1 text-xs text-red-600">{{ imageError }}</p>
         </div>
         <!-- Textos y opciones, generados del schema del layout -->
         <div v-for="f in fields" :key="f.key">
