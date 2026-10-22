@@ -705,17 +705,17 @@ const menus = computed<Menu[]>(() => {
         </div>
       </aside>
 
-      <!-- Vista previa de la página seleccionada -->
-      <section class="flex justify-center rounded-lg bg-neutral-200 p-4">
-        <div class="w-full max-w-[420px] overflow-hidden rounded-lg bg-white shadow">
-          <div class="max-h-[44rem] overflow-auto" style="--ck-page-min-h: 44rem">
+      <!-- Vista previa de la página seleccionada: mide lo que mide la página y se queda a la vista al recorrer la lista -->
+      <section class="self-start rounded-lg bg-neutral-200 p-4 lg:sticky lg:top-4">
+        <div class="mx-auto w-full max-w-[420px] overflow-hidden rounded-lg bg-white shadow">
+          <div class="editor-preview max-h-[44rem] overflow-auto" style="--ck-page-min-h: 44rem">
             <PageRenderer :page="page" :data="rendererData" :only="selected" />
           </div>
         </div>
       </section>
 
       <!-- Propiedades -->
-      <aside v-if="entry" class="card space-y-4">
+      <aside v-if="entry" class="card space-y-4 self-start">
         <div class="flex items-center justify-between gap-2">
           <h2 class="font-medium">Página {{ selected + 1 }} de {{ v2.pages.length }}</h2>
           <div v-if="canEdit" class="flex gap-1">
@@ -870,3 +870,11 @@ const menus = computed<Menu[]>(() => {
     </div>
   </div>
 </template>
+
+<style scoped>
+/* Portadas y contacto miden "85vh"/"70vh" de la ventana; en la vista previa llenan el alto de la página */
+.editor-preview :deep(section[class*='min-h-']) {
+  min-height: 0 !important;
+  flex: 1 1 auto;
+}
+</style>
