@@ -29,6 +29,8 @@ import { toastRef } from '../lib/toast'
 import EditorMenuBar from '../components/EditorMenuBar.vue'
 import { sortedByLabel, type Menu } from '../lib/menu'
 import ImageDropzone from '../components/ImageDropzone.vue'
+import { deleteCatalog, duplicateCatalog, unpublishCatalog } from '../lib/catalogs'
+import CatalogMetaDialog from '../components/CatalogMetaDialog.vue'
 
 type PageV2 = Extract<Page, { version: 2 }>
 
@@ -527,6 +529,68 @@ async function copyLink() {
   }
 }
 
+const metaOpen = ref(false)
+
+function onMetaSaved(meta: { name: string; slug: string }) {
+  name.value = meta.name
+  slug.value = meta.slug
+  metaOpen.value = false
+  notice.value = 'Cambios guardados.'
+}
+
+async function onUnpublish() {
+  const ok = await confirmDialog({
+    title: 'Despublicar catálogo',
+    message: 'Dejará de ser visible en su enlace público y volverá a borrador. Podrás publicarlo de nuevo.',
+    confirmText: 'Despublicar',
+    danger: true,
+  })
+  if (!ok) return
+  try {
+    await unpublishCatalog(id)
+    await loadCatalog()
+    notice.value = 'Catálogo despublicado.'
+  } catch (e) {
+    error.value = errorMessage(e)
+  }
+}
+
+async function onDuplicate() {
+  try {
+    // La copia parte del borrador guardado: se guardan antes los cambios pendientes
+    if (hasUnsaved.value && !structureError.value && !(await saveDraft(true))) {
+      error.value = 'No se pudo guardar el borrador antes de duplicar.'
+      return
+    }
+    const newId = await duplicateCatalog(id, organization.value!.id)
+    notice.value = 'Copia creada. Estás viendo la copia.'
+    await router.push({ name: 'catalog-editor', params: { id: newId } })
+  } catch (e) {
+    error.value = errorMessage(e)
+  }
+}
+
+async function onDelete() {
+  const ok = await confirmDialog({
+    title: 'Eliminar catálogo',
+    message: `¿Eliminar «${name.value}»? ${status.value === 'published' ? 'Su enlace público dejará de funcionar. ' : ''}Esta acción no se puede deshacer.`,
+    confirmText: 'Eliminar',
+    danger: true,
+  })
+  if (!ok) return
+  // Evita que el autoguardado o el aviso de salida intenten guardar un catálogo que ya no existe
+  const wasAutosave = autosave.value
+  autosave.value = false
+  lastSavedText.value = text.value
+  try {
+    await deleteCatalog(id)
+    await router.push({ name: 'catalogs' })
+  } catch (e) {
+    autosave.value = wasAutosave
+    error.value = errorMessage(e)
+  }
+}
+
 const menus = computed<Menu[]>(() => {
   const edit = canEdit.value
   const busy = saving.value || publishing.value
@@ -554,6 +618,11 @@ const menus = computed<Menu[]>(() => {
         },
         { separator: true },
         { label: 'Autoguardado', checked: autosave.value, action: () => (autosave.value = !autosave.value), disabled: !edit },
+        { separator: true },
+        { label: 'Nombre y dirección…', action: () => (metaOpen.value = true), disabled: !edit },
+        { label: 'Duplicar catálogo', action: onDuplicate, disabled: !edit || busy },
+        { label: 'Despublicar…', action: onUnpublish, disabled: !edit || !pub },
+        { label: 'Eliminar catálogo…', action: onDelete, disabled: !edit },
         { separator: true },
         { label: 'Volver a catálogos', action: () => router.push({ name: 'catalogs' }) },
       ],
@@ -868,6 +937,15 @@ const menus = computed<Menu[]>(() => {
         </div>
       </section>
     </div>
+    <CatalogMetaDialog
+      v-if="metaOpen"
+      :id="id"
+      :name="name"
+      :slug="slug"
+      :published="status === 'published'"
+      @close="metaOpen = false"
+      @saved="onMetaSaved"
+    />
   </div>
 </template>
 

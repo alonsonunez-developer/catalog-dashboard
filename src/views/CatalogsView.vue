@@ -16,6 +16,10 @@ import {
   type Product,
 } from '../lib/data'
 import TemplatePreview from '../components/TemplatePreview.vue'
+import { confirmDialog } from '../lib/confirm'
+import { toast } from '../lib/toast'
+import { deleteCatalog, duplicateCatalog, unpublishCatalog } from '../lib/catalogs'
+import CatalogMetaDialog from '../components/CatalogMetaDialog.vue'
 import { toastRef } from '../lib/toast'
 
 interface CatalogRow {
@@ -128,6 +132,58 @@ async function create() {
     creating.value = false
   }
 }
+
+const editing = ref<CatalogRow | null>(null)
+
+async function onDuplicate(c: CatalogRow) {
+  try {
+    await duplicateCatalog(c.id, orgId())
+    toast.success('Copia creada como borrador.')
+    await load()
+  } catch (e) {
+    error.value = errorMessage(e)
+  }
+}
+
+async function onUnpublish(c: CatalogRow) {
+  const ok = await confirmDialog({
+    title: 'Despublicar catálogo',
+    message: `«${c.name}» dejará de ser visible en su enlace público y volverá a borrador. Podrás publicarlo de nuevo.`,
+    confirmText: 'Despublicar',
+    danger: true,
+  })
+  if (!ok) return
+  try {
+    await unpublishCatalog(c.id)
+    toast.success('Catálogo despublicado.')
+    await load()
+  } catch (e) {
+    error.value = errorMessage(e)
+  }
+}
+
+async function onDelete(c: CatalogRow) {
+  const ok = await confirmDialog({
+    title: 'Eliminar catálogo',
+    message: `¿Eliminar «${c.name}»? ${c.status === 'published' ? 'Su enlace público dejará de funcionar. ' : ''}Esta acción no se puede deshacer.`,
+    confirmText: 'Eliminar',
+    danger: true,
+  })
+  if (!ok) return
+  try {
+    await deleteCatalog(c.id)
+    toast.success('Catálogo eliminado.')
+    await load()
+  } catch (e) {
+    error.value = errorMessage(e)
+  }
+}
+
+async function onMetaSaved() {
+  editing.value = null
+  toast.success('Cambios guardados.')
+  await load()
+}
 </script>
 
 <template>
@@ -220,29 +276,48 @@ async function create() {
     <p v-if="loading" class="text-sm text-neutral-500">Cargando…</p>
     <p v-else-if="!catalogs.length" class="text-sm text-neutral-500">Aún no hay catálogos.</p>
     <ul v-else class="grid gap-3 md:grid-cols-2">
-      <li v-for="c in catalogs" :key="c.id" class="card flex items-center justify-between gap-3">
-        <div>
-          <p class="font-medium">{{ c.name }}</p>
-          <p class="text-xs text-neutral-500">
-            /{{ c.slug }} ·
-            <span :class="c.status === 'published' ? 'text-green-700' : 'text-amber-700'">
-              {{ c.status === 'published' ? 'Publicado' : 'Borrador' }}
-            </span>
-          </p>
+      <li v-for="c in catalogs" :key="c.id" class="card space-y-3">
+        <div class="flex items-center justify-between gap-3">
+          <div class="min-w-0">
+            <p class="truncate font-medium">{{ c.name }}</p>
+            <p class="truncate text-xs text-neutral-500">
+              /{{ c.slug }} ·
+              <span :class="c.status === 'published' ? 'text-green-700' : 'text-amber-700'">
+                {{ c.status === 'published' ? 'Publicado' : 'Borrador' }}
+              </span>
+            </p>
+          </div>
+          <div class="flex shrink-0 gap-2">
+            <a
+              v-if="c.status === 'published'"
+              :href="`${viewerUrl}/${c.slug}`"
+              target="_blank"
+              rel="noopener noreferrer"
+              class="btn btn-secondary"
+            >
+              Ver
+            </a>
+            <RouterLink :to="{ name: 'catalog-editor', params: { id: c.id } }" class="btn btn-primary">Editar</RouterLink>
+          </div>
         </div>
-        <div class="flex gap-2">
-          <a
-            v-if="c.status === 'published'"
-            :href="`${viewerUrl}/${c.slug}`"
-            target="_blank"
-            rel="noopener noreferrer"
-            class="btn btn-secondary"
-          >
-            Ver
-          </a>
-          <RouterLink :to="{ name: 'catalog-editor', params: { id: c.id } }" class="btn btn-primary">Editar</RouterLink>
+        <div v-if="canEdit" class="flex flex-wrap gap-2 border-t pt-3 text-xs">
+          <button type="button" class="btn btn-secondary !px-2 !py-1" @click="onDuplicate(c)">Duplicar</button>
+          <button type="button" class="btn btn-secondary !px-2 !py-1" @click="editing = c">Nombre y dirección</button>
+          <button v-if="c.status === 'published'" type="button" class="btn btn-secondary !px-2 !py-1" @click="onUnpublish(c)">
+            Despublicar
+          </button>
+          <button type="button" class="btn btn-danger !px-2 !py-1" @click="onDelete(c)">Eliminar</button>
         </div>
       </li>
     </ul>
+    <CatalogMetaDialog
+      v-if="editing"
+      :id="editing.id"
+      :name="editing.name"
+      :slug="editing.slug"
+      :published="editing.status === 'published'"
+      @close="editing = null"
+      @saved="onMetaSaved"
+    />
   </div>
 </template>
