@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { onMounted, ref, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { supabase } from '../lib/supabase'
 import { canEdit, organization } from '../lib/session'
@@ -9,6 +9,8 @@ import { toast, toastRef } from '../lib/toast'
 import { deleteCatalog, duplicateCatalog, unpublishCatalog } from '../lib/catalogs'
 import CatalogMetaDialog from '../components/CatalogMetaDialog.vue'
 import ActionMenu from '../components/ActionMenu.vue'
+import { matchesQuery } from '../lib/search'
+import SearchInput from '../components/SearchInput.vue'
 import type { MenuItem } from '../lib/menu'
 
 interface CatalogRow {
@@ -26,6 +28,12 @@ const catalogs = ref<CatalogRow[]>([])
 const loading = ref(true)
 const error = toastRef('error')
 const editing = ref<CatalogRow | null>(null)
+const query = ref('')
+const filtered = computed(() =>
+  catalogs.value.filter((c) =>
+    matchesQuery(query.value, [c.name, c.slug, c.status === 'published' ? 'publicado' : 'borrador']),
+  ),
+)
 
 async function load() {
   const { data, error: e } = await supabase
@@ -116,37 +124,50 @@ async function onMetaSaved() {
       Aún no hay catálogos.
       <RouterLink v-if="canEdit" :to="{ name: 'catalog-new' }" class="underline">Crea el primero</RouterLink>
     </p>
-    <div v-else class="card overflow-x-auto !p-0">
-      <table class="w-full text-left text-sm">
-        <thead class="border-b bg-neutral-50 text-neutral-600">
-          <tr>
-            <th class="px-3 py-2">Nombre</th>
-            <th class="px-3 py-2">Dirección</th>
-            <th class="px-3 py-2">Estado</th>
-            <th class="px-3 py-2 text-right">Acciones</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr v-for="c in catalogs" :key="c.id" class="border-b last:border-0">
-            <td class="max-w-[16rem] truncate px-3 py-2 font-medium">{{ c.name }}</td>
-            <td class="px-3 py-2 text-neutral-600">/{{ c.slug }}</td>
-            <td class="px-3 py-2">
-              <span
-                class="rounded-full px-2 py-0.5 text-xs"
-                :class="c.status === 'published' ? 'bg-green-100 text-green-800' : 'bg-amber-100 text-amber-800'"
-              >
-                {{ c.status === 'published' ? 'Publicado' : 'Borrador' }}
-              </span>
-            </td>
-            <td class="px-3 py-2">
-              <div class="flex items-center justify-end">
-                <ActionMenu :items="rowActions(c)" />
-              </div>
-            </td>
-          </tr>
-        </tbody>
-      </table>
-    </div>
+    <template v-else>
+      <div class="flex flex-wrap items-center gap-3">
+        <div class="w-full max-w-sm">
+          <SearchInput v-model="query" placeholder="Buscar por nombre, dirección o estado" />
+        </div>
+        <p v-if="query" class="text-sm text-neutral-500" aria-live="polite">{{ filtered.length }} de {{ catalogs.length }}</p>
+      </div>
+
+      <p v-if="!filtered.length" class="text-sm text-neutral-500">
+        Ningún catálogo coincide con «{{ query }}».
+        <button type="button" class="underline" @click="query = ''">Limpiar búsqueda</button>
+      </p>
+      <div v-else class="card overflow-x-auto !p-0">
+        <table class="w-full text-left text-sm">
+          <thead class="border-b bg-neutral-50 text-neutral-600">
+            <tr>
+              <th class="px-3 py-2">Nombre</th>
+              <th class="px-3 py-2">Dirección</th>
+              <th class="px-3 py-2">Estado</th>
+              <th class="px-3 py-2 text-right">Acciones</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="c in filtered" :key="c.id" class="border-b last:border-0">
+              <td class="max-w-[16rem] truncate px-3 py-2 font-medium">{{ c.name }}</td>
+              <td class="px-3 py-2 text-neutral-600">/{{ c.slug }}</td>
+              <td class="px-3 py-2">
+                <span
+                  class="rounded-full px-2 py-0.5 text-xs"
+                  :class="c.status === 'published' ? 'bg-green-100 text-green-800' : 'bg-amber-100 text-amber-800'"
+                >
+                  {{ c.status === 'published' ? 'Publicado' : 'Borrador' }}
+                </span>
+              </td>
+              <td class="px-3 py-2">
+                <div class="flex items-center justify-end">
+                  <ActionMenu :items="rowActions(c)" />
+                </div>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </template>
 
     <CatalogMetaDialog
       v-if="editing"
