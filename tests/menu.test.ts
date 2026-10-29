@@ -53,3 +53,17 @@ describe('sortedByLabel', () => {
     expect(original.map((i) => i.label)).toEqual(['b', 'a'])
   })
 })
+
+describe('acciones de fila para un rol sin edición', () => {
+  it('solo quedan las acciones de lectura y ningún separador suelto', () => {
+    const out = visibleItems([
+      item('Editar'),
+      item('Ver catálogo', { hidden: true }),
+      { separator: true, hidden: true },
+      item('Duplicar', { hidden: true }),
+      { separator: true, hidden: true },
+      item('Eliminar…', { hidden: true, danger: true }),
+    ])
+    expect(labels(out)).toEqual(['Editar'])
+  })
+})

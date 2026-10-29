@@ -7,6 +7,7 @@ export interface MenuItem {
   hidden?: boolean
   separator?: boolean
   children?: MenuItem[] // submenú
+  danger?: boolean // se pinta de rojo (acciones destructivas)
 }
 export interface Menu {
   label: string

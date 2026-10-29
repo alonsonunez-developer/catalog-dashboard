@@ -13,6 +13,7 @@ const router = createRouter({
       children: [
         { path: '', redirect: { name: 'catalogs' } },
         { path: 'catalogs', name: 'catalogs', component: () => import('./views/CatalogsView.vue') },
+        { path: 'catalogs/new', name: 'catalog-new', component: () => import('./views/NewCatalogView.vue') },
         { path: 'catalogs/:id', name: 'catalog-editor', component: () => import('./views/CatalogEditorView.vue') },
         { path: 'products', name: 'products', component: () => import('./views/ProductsView.vue') },
         { path: 'categories', name: 'categories', component: () => import('./views/CategoriesView.vue') },
