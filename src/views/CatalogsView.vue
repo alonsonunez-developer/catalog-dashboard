@@ -12,6 +12,8 @@ import ActionMenu from '../components/ActionMenu.vue'
 import { matchesQuery } from '../lib/search'
 import SearchInput from '../components/SearchInput.vue'
 import type { MenuItem } from '../lib/menu'
+import AppIcon from '../components/AppIcon.vue'
+import editIcon from '../assets/icons/edit.svg'
 
 interface CatalogRow {
   id: string
@@ -159,9 +161,17 @@ async function onMetaSaved() {
                 </span>
               </td>
               <td class="px-3 py-2">
-                <div class="flex items-center justify-end">
-                  <ActionMenu :items="rowActions(c)" />
-                </div>
+                <div class="flex items-center justify-end gap-2">
+                  <RouterLink
+                    :to="{ name: 'catalog-editor', params: { id: c.id } }"
+                    class="btn btn-secondary !px-2 !py-1.5"
+                    title="Editar catálogo"
+                    :aria-label="`Editar ${c.name}`"
+                  >
+                  <AppIcon :src="editIcon" :size="16" />
+                </RouterLink>
+                <ActionMenu :items="rowActions(c)" />
+              </div>
               </td>
             </tr>
           </tbody>

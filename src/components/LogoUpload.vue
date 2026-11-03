@@ -3,9 +3,10 @@ import { computed, ref } from 'vue'
 import { supabase } from '../lib/supabase'
 import { isAdmin, organization } from '../lib/session'
 import { errorMessage } from '../lib/data'
-import { ACCEPT_ATTR, deleteStoredImage, uploadImage, validateImage } from '../lib/storage'
 import { confirmDialog } from '../lib/confirm'
 import { toastRef } from '../lib/toast'
+import { deleteStoredImage, uploadImage, validateImage } from '../lib/storage'
+import ImageDropzone from './ImageDropzone.vue'
 
 const logo = computed(() => organization.value?.business.logo ?? '')
 const busy = ref(false)
@@ -23,13 +24,8 @@ async function saveLogo(url: string | null) {
   organization.value = { ...organization.value!, business }
 }
 
-async function onFile(ev: Event) {
-  const input = ev.target as HTMLInputElement
-  const file = input.files?.[0]
-  input.value = ''
-  if (!file) return
+async function onFile(file: File) {
   error.value = ''
-  done.value = ''
   const invalid = validateImage(file)
   if (invalid) {
     error.value = invalid
@@ -62,7 +58,6 @@ async function remove() {
   })
   if (!ok) return
   error.value = ''
-  done.value = ''
   busy.value = true
   const previous = logo.value
   try {
@@ -86,23 +81,16 @@ async function remove() {
     </p>
     <p v-if="!isAdmin" class="text-sm text-neutral-500">Solo un administrador puede cambiar el logo.</p>
 
-    <div class="flex items-center gap-4">
-      <div class="flex h-20 w-40 items-center justify-center rounded border border-neutral-200 bg-neutral-100 p-2">
-        <img v-if="logo" :src="logo" alt="Logo del negocio" class="max-h-full max-w-full object-contain" />
-        <span v-else class="text-xs text-neutral-400">Sin logo</span>
-      </div>
-      <div v-if="isAdmin" class="space-y-1">
-        <input type="file" :accept="ACCEPT_ATTR" class="block text-sm" :disabled="busy" @change="onFile" />
-        <button v-if="logo" type="button" class="text-xs text-red-700 underline" :disabled="busy" @click="remove">
-          Quitar logo
-        </button>
-      </div>
+    <div class="max-w-sm">
+      <ImageDropzone
+        :src="logo"
+        :busy="busy"
+        :disabled="!isAdmin"
+        contain
+        hint="JPG, PNG o WebP. Para que se vea bien sobre cualquier color de página, usa un PNG o WebP con fondo transparente."
+        @file="onFile"
+        @remove="remove"
+      />
     </div>
-    <p class="text-xs text-neutral-500">
-      JPG, PNG o WebP. Para que se vea bien sobre cualquier color de página, usa un PNG o WebP con fondo transparente.
-    </p>
-    <p v-if="busy" class="text-xs text-neutral-500">Procesando…</p>
-    <p v-if="done" class="text-sm text-green-700">{{ done }}</p>
-    <p v-if="error" class="text-sm text-red-600">{{ error }}</p>
   </section>
 </template>

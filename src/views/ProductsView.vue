@@ -8,6 +8,8 @@ import { confirmDialog } from '../lib/confirm'
 import { toast, toastRef } from '../lib/toast'
 import { matchesQuery } from '../lib/search'
 import SearchInput from '../components/SearchInput.vue'
+import AppIcon from '../components/AppIcon.vue'
+import editIcon from '../assets/icons/edit.svg'
 
 const orgId = () => organization.value!.id
 const products = ref<Product[]>([])
@@ -127,7 +129,14 @@ async function remove(p: Product) {
               <td class="px-3 py-2">{{ p.is_active ? 'Visible' : 'Oculto' }}</td>
               <td class="space-x-2 px-3 py-2 text-right">
                 <template v-if="canEdit">
-                  <RouterLink :to="{ name: 'product-edit', params: { id: p.id } }" class="btn btn-secondary">Editar</RouterLink>
+                    <RouterLink
+                      :to="{ name: 'product-edit', params: { id: p.id } }"
+                      class="btn btn-secondary !px-2 !py-1.5"
+                      title="Editar producto"
+                      :aria-label="`Editar ${p.name}`"
+                    >
+                    <AppIcon :src="editIcon" :size="16" />
+                  </RouterLink>
                   <button class="btn btn-danger" @click="remove(p)">Eliminar</button>
                 </template>
               </td>

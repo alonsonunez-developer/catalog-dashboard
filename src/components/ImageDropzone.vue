@@ -7,11 +7,19 @@ const props = defineProps<{
   busy?: boolean
   disabled?: boolean
   hint?: string
+  contain?: boolean // muestra la imagen completa sobre un damero (por ejemplo, un logo)
 }>()
 const emit = defineEmits<{ file: [file: File]; remove: [] }>()
 
 const input = ref<HTMLInputElement | null>(null)
 const dragging = ref(false)
+const checker = {
+  backgroundColor: '#ffffff',
+  backgroundImage:
+    'linear-gradient(45deg,#e5e5e5 25%,transparent 25%),linear-gradient(-45deg,#e5e5e5 25%,transparent 25%),linear-gradient(45deg,transparent 75%,#e5e5e5 75%),linear-gradient(-45deg,transparent 75%,#e5e5e5 75%)',
+  backgroundSize: '16px 16px',
+  backgroundPosition: '0 0, 0 8px, 8px -8px, -8px 0',
+}
 let depth = 0 // dragenter/dragleave se disparan también al pasar por los elementos hijos
 
 const blocked = () => !!props.disabled || !!props.busy
@@ -90,7 +98,13 @@ function onDrop(ev: DragEvent) {
         @dragleave="onLeave"
         @drop.prevent="onDrop"
       >
-        <img :src="src" alt="Vista previa de la imagen" class="h-36 w-full bg-neutral-100 object-cover" />
+        <img
+          :src="src"
+          alt="Vista previa de la imagen"
+          class="h-36 w-full"
+          :class="contain ? 'bg-neutral-100 object-contain p-2' : 'bg-neutral-100 object-cover'"
+          :style="contain ? checker : undefined"
+        />
         <div v-if="dragging" class="absolute inset-0 flex items-center justify-center bg-black/50 text-sm font-medium text-white">
           Suelta para reemplazar
         </div>
