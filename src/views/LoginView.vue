@@ -171,6 +171,7 @@ onBeforeUnmount(() => window.removeEventListener('pageshow', onPageShow))
 <template>
   <div class="flex min-h-screen items-center justify-center bg-neutral-50 p-4">
     <div class="card w-full max-w-sm space-y-4">
+      <div class="flex justify-center"><BrandMark /></div>
       <div v-if="!forgot" class="flex rounded-md bg-neutral-100 p-1 text-sm" role="tablist">
         <button
           type="button"

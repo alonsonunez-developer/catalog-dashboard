@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import { ACCEPT_ATTR } from '../lib/storage'
+import AppIcon from './AppIcon.vue';
 
 const props = defineProps<{
   src?: string
@@ -76,9 +77,11 @@ function onDrop(ev: DragEvent) {
       @dragleave="onLeave"
       @drop.prevent="onDrop"
     >
-      <svg class="h-8 w-8 text-neutral-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
-        <path stroke-linecap="round" stroke-linejoin="round" d="M12 16V4m0 0L8 8m4-4 4 4M4 16v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2" />
-      </svg>
+      <AppIcon name="upload" :size="32" class="text-neutral-400">
+        <svg class="h-8 w-8 text-neutral-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M12 16V4m0 0L8 8m4-4 4 4M4 16v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2" />
+        </svg>
+      </AppIcon>
       <span class="text-sm font-medium text-neutral-800">
         {{ dragging ? 'Suelta la imagen aquí' : 'Haz clic para subir una imagen' }}
       </span>

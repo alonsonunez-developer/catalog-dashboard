@@ -13,7 +13,8 @@ import { matchesQuery } from '../lib/search'
 import SearchInput from '../components/SearchInput.vue'
 import type { MenuItem } from '../lib/menu'
 import AppIcon from '../components/AppIcon.vue'
-import editIcon from '../assets/icons/edit.svg'
+import EmptyState from '../components/EmptyState.vue'
+import SkeletonRows from '../components/SkeletonRows.vue'
 
 interface CatalogRow {
   id: string
@@ -96,14 +97,14 @@ async function onDelete(c: CatalogRow) {
 function rowActions(c: CatalogRow): MenuItem[] {
   const published = c.status === 'published'
   return [
-    { label: 'Editar', action: () => router.push({ name: 'catalog-editor', params: { id: c.id } }) },
-    { label: 'Ver catálogo', action: () => window.open(`${viewerUrl}/${c.slug}`, '_blank', 'noopener'), hidden: !published },
+    { label: 'Editar', action: () => router.push({ name: 'catalog-editor', params: { id: c.id } }), icon: 'edit' },
+    { label: 'Ver catálogo', action: () => window.open(`${viewerUrl}/${c.slug}`, '_blank', 'noopener'), hidden: !published, icon: 'eye' },
     { separator: true, hidden: !canEdit.value },
-    { label: 'Duplicar', action: () => onDuplicate(c), hidden: !canEdit.value },
-    { label: 'Nombre y dirección…', action: () => (editing.value = c), hidden: !canEdit.value },
-    { label: 'Despublicar…', action: () => onUnpublish(c), hidden: !canEdit.value || !published },
+    { label: 'Duplicar', action: () => onDuplicate(c), hidden: !canEdit.value, icon: 'copy' },
+    { label: 'Nombre y dirección…', action: () => (editing.value = c), hidden: !canEdit.value, icon: 'link' },
+    { label: 'Despublicar…', action: () => onUnpublish(c), hidden: !canEdit.value || !published, icon: 'eye-off' },
     { separator: true, hidden: !canEdit.value },
-    { label: 'Eliminar…', action: () => onDelete(c), hidden: !canEdit.value, danger: true },
+    { label: 'Eliminar…', action: () => onDelete(c), hidden: !canEdit.value, danger: true, icon: 'trash' },
   ]
 }
 
@@ -118,14 +119,21 @@ async function onMetaSaved() {
   <div class="space-y-6">
     <div class="flex items-center justify-between gap-3">
       <h1 class="text-2xl font-semibold">Catálogos</h1>
-      <RouterLink v-if="canEdit" :to="{ name: 'catalog-new' }" class="btn btn-primary">Nuevo catálogo</RouterLink>
+      <RouterLink v-if="canEdit" :to="{ name: 'catalog-new' }" class="btn btn-primary gap-1.5">
+        <AppIcon name="plus" :size="16" />Nuevo catálogo
+      </RouterLink>
     </div>
 
-    <p v-if="loading" class="text-sm text-neutral-500">Cargando…</p>
-    <p v-else-if="!catalogs.length" class="text-sm text-neutral-500">
-      Aún no hay catálogos.
-      <RouterLink v-if="canEdit" :to="{ name: 'catalog-new' }" class="underline">Crea el primero</RouterLink>
-    </p>
+    <SkeletonRows v-if="loading" />
+    <EmptyState
+      v-else-if="!catalogs.length"
+      title="Aún no tienes catálogos"
+      text="Crea tu primer catálogo a partir de una plantilla y compártelo con tus clientes."
+    >
+      <RouterLink v-if="canEdit" :to="{ name: 'catalog-new' }" class="btn btn-primary gap-1.5">
+        <AppIcon name="plus" :size="16" />Crear el primero
+      </RouterLink>
+    </EmptyState>
     <template v-else>
       <div class="flex flex-wrap items-center gap-3">
         <div class="w-full max-w-sm">
@@ -162,16 +170,8 @@ async function onMetaSaved() {
               </td>
               <td class="px-3 py-2">
                 <div class="flex items-center justify-end gap-2">
-                  <RouterLink
-                    :to="{ name: 'catalog-editor', params: { id: c.id } }"
-                    class="btn btn-secondary !px-2 !py-1.5"
-                    title="Editar catálogo"
-                    :aria-label="`Editar ${c.name}`"
-                  >
-                  <AppIcon :src="editIcon" :size="16" />
-                </RouterLink>
-                <ActionMenu :items="rowActions(c)" />
-              </div>
+                  <ActionMenu :items="rowActions(c)" />
+                </div>
               </td>
             </tr>
           </tbody>

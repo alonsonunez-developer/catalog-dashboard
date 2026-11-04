@@ -1,9 +1,13 @@
 <script setup lang="ts">
 import { nextTick, onBeforeUnmount, ref } from 'vue'
 import { visibleItems, type MenuItem } from '../lib/menu'
+import type { IconName } from '../lib/icons'
+import AppIcon from './AppIcon.vue'
 
-const props = withDefaults(defineProps<{ items: MenuItem[]; label?: string }>(), { label: '...' })
-
+const props = withDefaults(
+  defineProps<{ items: MenuItem[]; icon?: IconName; label?: string }>(),
+  { icon: 'ellipsis-vertical', label: 'Acciones' },
+)
 const open = ref(false)
 const trigger = ref<HTMLButtonElement | null>(null)
 const panel = ref<HTMLElement | null>(null)
@@ -83,12 +87,17 @@ onBeforeUnmount(() => {
     <button
       ref="trigger"
       type="button"
-      class="btn btn-secondary !px-2.5 !py-1.5 text-sm"
+      class="btn btn-secondary !px-2.5 !py-1.5"
       aria-haspopup="menu"
       :aria-expanded="open"
+      :aria-label="props.label"
+      :title="props.label"
       @click="toggle"
     >
-      {{ props.label }} <span aria-hidden="true" class="ml-1 text-xs">▾</span>
+      <AppIcon :name="props.icon" :size="18">
+        <!-- respaldo mientras no exista el archivo del ícono -->
+        <span aria-hidden="true" class="px-0.5 text-base leading-none">⋯</span>
+      </AppIcon>
     </button>
 
     <!-- Se dibuja en el <body> para que la tabla (overflow) no lo recorte -->
@@ -113,6 +122,7 @@ onBeforeUnmount(() => {
             :class="it.danger ? 'text-red-700' : ''"
             @click="run(it)"
           >
+            <AppIcon v-if="it.icon" :name="it.icon" :size="16" class="mr-2" />
             {{ it.label }}
           </button>
         </template>

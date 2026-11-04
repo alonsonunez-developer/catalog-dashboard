@@ -1,11 +1,13 @@
 <script setup lang="ts">
 import { dismissToast, pauseToast, resumeToast, toasts } from '../lib/toast'
+import AppIcon from './AppIcon.vue'
 
 const styles = {
   success: 'border-green-300 bg-green-50 text-green-900',
   error: 'border-red-300 bg-red-50 text-red-900',
   info: 'border-neutral-300 bg-white text-neutral-900',
 } as const
+const iconNames = { success: 'check', error: 'alert', info: 'info' } as const
 const icons = { success: '✓', error: '!', info: 'i' } as const
 </script>
 
@@ -28,7 +30,7 @@ const icons = { success: '✓', error: '!', info: 'i' } as const
           class="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-black/10 text-xs font-bold"
           aria-hidden="true"
         >
-          {{ icons[t.kind] }}
+          <AppIcon :name="iconNames[t.kind]" :size="14">{{ icons[t.kind] }}</AppIcon>
         </span>
         <p class="min-w-0 flex-1 break-words">{{ t.message }}</p>
         <button
@@ -37,7 +39,7 @@ const icons = { success: '✓', error: '!', info: 'i' } as const
           aria-label="Cerrar aviso"
           @click="dismissToast(t.id)"
         >
-          ✕
+          <AppIcon name="close" :size="14">✕</AppIcon>
         </button>
       </div>
     </TransitionGroup>

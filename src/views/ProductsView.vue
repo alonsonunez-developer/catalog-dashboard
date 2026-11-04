@@ -9,7 +9,8 @@ import { toast, toastRef } from '../lib/toast'
 import { matchesQuery } from '../lib/search'
 import SearchInput from '../components/SearchInput.vue'
 import AppIcon from '../components/AppIcon.vue'
-import editIcon from '../assets/icons/edit.svg'
+import EmptyState from '../components/EmptyState.vue'
+import SkeletonRows from '../components/SkeletonRows.vue'
 
 const orgId = () => organization.value!.id
 const products = ref<Product[]>([])
@@ -71,14 +72,21 @@ async function remove(p: Product) {
   <div class="space-y-4">
     <div class="flex items-center justify-between gap-3">
       <h1 class="text-2xl font-semibold">Productos</h1>
-      <RouterLink v-if="canEdit" :to="{ name: 'product-new' }" class="btn btn-primary">Nuevo producto</RouterLink>
+      <RouterLink v-if="canEdit" :to="{ name: 'product-new' }" class="btn btn-primary gap-1.5">
+        <AppIcon name="plus" :size="16" />Nuevo producto
+      </RouterLink>
     </div>
 
-    <p v-if="loading" class="text-sm text-neutral-500">Cargando…</p>
-    <p v-else-if="!products.length" class="text-sm text-neutral-500">
-      Aún no hay productos.
-      <RouterLink v-if="canEdit" :to="{ name: 'product-new' }" class="underline">Crea el primero</RouterLink>
-    </p>
+    <SkeletonRows v-if="loading" />
+    <EmptyState
+      v-else-if="!products.length"
+      title="Aún no tienes productos"
+      text="Agrega tus productos con foto y precio, o impórtalos más adelante desde Excel."
+    >
+      <RouterLink v-if="canEdit" :to="{ name: 'product-new' }" class="btn btn-primary gap-1.5">
+        <AppIcon name="plus" :size="16" />Crear el primero
+      </RouterLink>
+    </EmptyState>
     <template v-else>
       <div class="flex flex-wrap items-center gap-3">
         <div class="w-full max-w-sm">
@@ -129,15 +137,12 @@ async function remove(p: Product) {
               <td class="px-3 py-2">{{ p.is_active ? 'Visible' : 'Oculto' }}</td>
               <td class="space-x-2 px-3 py-2 text-right">
                 <template v-if="canEdit">
-                    <RouterLink
-                      :to="{ name: 'product-edit', params: { id: p.id } }"
-                      class="btn btn-secondary !px-2 !py-1.5"
-                      title="Editar producto"
-                      :aria-label="`Editar ${p.name}`"
-                    >
-                    <AppIcon :src="editIcon" :size="16" />
+                  <RouterLink :to="{ name: 'product-edit', params: { id: p.id } }" class="btn btn-secondary !px-2 !py-1.5" title="Editar producto" :aria-label="`Editar ${p.name}`">
+                    <AppIcon name="edit" :size="16">Editar</AppIcon>
                   </RouterLink>
-                  <button class="btn btn-danger" @click="remove(p)">Eliminar</button>
+                  <button class="btn btn-danger !px-2 !py-1.5" title="Eliminar producto" :aria-label="`Eliminar ${p.name}`" @click="remove(p)">
+                    <AppIcon name="trash" :size="16">Eliminar</AppIcon>
+                  </button>
                 </template>
               </td>
             </tr>

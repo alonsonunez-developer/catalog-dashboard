@@ -1,3 +1,4 @@
+import type { IconName } from './icons'
 export interface MenuItem {
   label?: string
   action?: () => void
@@ -8,6 +9,7 @@ export interface MenuItem {
   separator?: boolean
   children?: MenuItem[] // submenú
   danger?: boolean // se pinta de rojo (acciones destructivas)
+  icon?: IconName
 }
 export interface Menu {
   label: string
