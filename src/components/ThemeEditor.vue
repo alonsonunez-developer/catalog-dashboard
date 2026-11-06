@@ -101,7 +101,7 @@ const warnings = computed(() => {
 
     <div
       v-if="open && !disabled"
-      class="card absolute left-0 top-full z-20 mt-2 max-h-[80vh] w-[22rem] space-y-3 overflow-y-auto shadow-lg"
+      class="card fixed inset-x-3 bottom-3 z-40 max-h-[70vh] space-y-3 overflow-y-auto shadow-lg sm:absolute sm:inset-x-auto sm:bottom-auto sm:left-0 sm:top-full sm:z-20 sm:mt-2 sm:max-h-[80vh] sm:w-[22rem]"
     >
       <div class="flex items-start justify-between gap-2">
         <p class="text-xs text-neutral-500">

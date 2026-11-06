@@ -140,7 +140,7 @@ const itemClass =
         data-panel
         role="menu"
         :aria-label="m.label"
-        class="absolute left-0 top-full z-30 mt-1 min-w-64 rounded-md border border-neutral-200 bg-white py-1 shadow-lg"
+        class="absolute left-0 top-full z-30 mt-1 min-w-64 max-w-[calc(100vw-1rem)] rounded-md border border-neutral-200 bg-white py-1 shadow-lg"
       >
         <template v-for="(it, k) in visibleItems(m.items)" :key="k">
           <hr v-if="it.separator" role="separator" class="my-1 border-neutral-200" />
@@ -168,7 +168,7 @@ const itemClass =
               v-if="sub === k"
               role="menu"
               :aria-label="it.label"
-              class="absolute left-full top-0 z-40 ml-1 max-h-[70vh] min-w-56 overflow-y-auto rounded-md border border-neutral-200 bg-white py-1 shadow-lg"
+              class="mt-1 max-h-[50vh] overflow-y-auto border-t border-neutral-200 bg-neutral-50 pl-4 sm:absolute sm:left-full sm:top-0 sm:z-40 sm:ml-1 sm:mt-0 sm:max-h-[70vh] sm:min-w-56 sm:rounded-md sm:border sm:bg-white sm:py-1 sm:pl-0 sm:shadow-lg"
             >
               <button
                 v-for="(c, j) in visibleItems(it.children)"

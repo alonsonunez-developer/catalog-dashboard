@@ -31,6 +31,7 @@ import { sortedByLabel, type Menu } from '../lib/menu'
 import ImageDropzone from '../components/ImageDropzone.vue'
 import { deleteCatalog, duplicateCatalog, unpublishCatalog } from '../lib/catalogs'
 import CatalogMetaDialog from '../components/CatalogMetaDialog.vue'
+import { useMediaQuery } from '../lib/useMediaQuery'
 
 type PageV2 = Extract<Page, { version: 2 }>
 
@@ -271,6 +272,26 @@ function summary(e: PageV2['pages'][number]) {
 function select(i: number) {
   selected.value = i
   productToAdd.value = ''
+}
+// ===== Adaptación a pantallas chicas =====
+const isDesktop = useMediaQuery('(min-width: 1024px)')
+type Tab = 'pages' | 'preview' | 'props'
+const tab = ref<Tab>('preview')
+const tabs: { id: Tab; label: string }[] = [
+  { id: 'pages', label: 'Páginas' },
+  { id: 'preview', label: 'Vista previa' },
+  { id: 'props', label: 'Propiedades' },
+]
+
+// Al elegir una página de la lista, en pantallas chicas se pasa a ver su vista previa
+function pick(i: number) {
+  select(i)
+  tab.value = 'preview'
+}
+function step(delta: number) {
+  if (!v2.value) return
+  const n = selected.value + delta
+  if (n >= 0 && n < v2.value.pages.length) select(n)
 }
 
 function onAddPage() {
@@ -740,19 +761,42 @@ const menus = computed<Menu[]>(() => {
     </ul>
     <p v-if="error" class="text-sm text-red-600">{{ error }}</p>
     <p v-if="notice" class="text-sm text-green-700">{{ notice }}</p>
-    <ShareCard v-if="status === 'published'" :url="`${viewerUrl}/${slug}`" :name="name" :slug="slug" />
+    <template v-if="status === 'published'">
+      <ShareCard v-if="isDesktop" :url="`${viewerUrl}/${slug}`" :name="name" :slug="slug" />
+      <details v-else class="card !p-3">
+        <summary class="cursor-pointer text-sm font-medium">Compartir catálogo</summary>
+        <div class="mt-3">
+          <ShareCard :url="`${viewerUrl}/${slug}`" :name="name" :slug="slug" />
+        </div>
+      </details>
+    </template>
 
     <!-- ===== Editor visual ===== -->
     <div v-if="visual && v2" class="grid gap-4 lg:grid-cols-[15rem_minmax(0,1fr)_21rem]">
+      <!-- Pestañas: solo en tablet y celular -->
+      <div v-if="!isDesktop" class="sticky top-0 z-20 -mx-4 flex gap-1 border-b bg-neutral-50 px-4 py-2" role="tablist">
+        <button
+          v-for="t in tabs"
+          :key="t.id"
+          type="button"
+          role="tab"
+          :aria-selected="tab === t.id"
+          class="flex-1 rounded-md px-3 py-2 text-sm font-medium"
+          :class="tab === t.id ? 'bg-neutral-900 text-white' : 'bg-white text-neutral-700 border border-neutral-200'"
+          @click="tab = t.id"
+        >
+          {{ t.label }}
+        </button>
+      </div>
       <!-- Lista de páginas -->
-      <aside class="space-y-2">
+      <aside v-show="isDesktop || tab === 'pages'" class="space-y-2">
         <ol class="space-y-1">
           <li v-for="(p, i) in v2.pages" :key="p.id">
             <button
               type="button"
               class="w-full rounded-md border p-2 text-left text-sm"
               :class="i === selected ? 'border-neutral-900 bg-white' : 'border-neutral-200 bg-white/60 hover:bg-white'"
-              @click="select(i)"
+              @click="pick(i)"
             >
               <span class="font-medium">{{ i + 1 }}. {{ layoutLabel(p.layout) }}</span>
               <span class="block truncate text-xs text-neutral-500">{{ summary(p) || '—' }}</span>
@@ -775,16 +819,27 @@ const menus = computed<Menu[]>(() => {
       </aside>
 
       <!-- Vista previa de la página seleccionada: mide lo que mide la página y se queda a la vista al recorrer la lista -->
-      <section class="self-start rounded-lg bg-neutral-200 p-4 lg:sticky lg:top-4">
+      <section v-show="isDesktop || tab === 'preview'" class="self-start rounded-lg bg-neutral-200 p-2 sm:p-4 lg:sticky lg:top-4">
+        <div v-if="!isDesktop" class="mb-2 flex items-center justify-between gap-2 text-sm">
+          <button type="button" class="btn btn-secondary !px-3" :disabled="selected === 0" aria-label="Página anterior" @click="step(-1)">‹</button>
+          <span>Página {{ selected + 1 }} de {{ v2.pages.length }}</span>
+          <button type="button" class="btn btn-secondary !px-3" :disabled="selected === v2.pages.length - 1" aria-label="Página siguiente" @click="step(1)">›</button>
+        </div>
         <div class="mx-auto w-full max-w-[420px] overflow-hidden rounded-lg bg-white shadow">
-          <div class="editor-preview max-h-[44rem] overflow-auto" style="--ck-page-min-h: 44rem">
+          <div
+            class="editor-preview max-h-[70vh] overflow-auto lg:max-h-[44rem]"
+            style="--ck-page-min-h: min(44rem, 70vh)"
+          >
             <PageRenderer :page="page" :data="rendererData" :only="selected" />
           </div>
         </div>
+        <button v-if="canEdit && !isDesktop" type="button" class="btn btn-primary mt-3 w-full" @click="tab = 'props'">
+          Editar esta página
+        </button>
       </section>
 
       <!-- Propiedades -->
-      <aside v-if="entry" class="card space-y-4 self-start">
+      <aside v-if="entry" v-show="isDesktop || tab === 'props'" class="card space-y-4 self-start">
         <div class="flex items-center justify-between gap-2">
           <h2 class="font-medium">Página {{ selected + 1 }} de {{ v2.pages.length }}</h2>
           <div v-if="canEdit" class="flex gap-1">
@@ -901,9 +956,9 @@ const menus = computed<Menu[]>(() => {
                 {{ productName(pid) }}<span v-if="productById.get(pid) && !productById.get(pid)!.is_active"> (oculto)</span>
               </span>
               <template v-if="canEdit">
-                <button type="button" class="btn btn-secondary !px-2 !py-0.5" :disabled="i === 0" @click="onMoveProduct(i, -1)">↑</button>
-                <button type="button" class="btn btn-secondary !px-2 !py-0.5" :disabled="i === pageProducts.length - 1" @click="onMoveProduct(i, 1)">↓</button>
-                <button type="button" class="btn btn-danger !px-2 !py-0.5" @click="onRemoveProduct(i)">✕</button>
+                <button type="button" class="btn btn-secondary !px-2.5 !py-1.5 lg:!px-2 lg:!py-0.5" :disabled="i === 0" @click="onMoveProduct(i, -1)">↑</button>
+                <button type="button" class="btn btn-secondary !px-2.5 !py-1.5 lg:!px-2 lg:!py-0.5" :disabled="i === pageProducts.length - 1" @click="onMoveProduct(i, 1)">↓</button>
+                <button type="button" class="btn btn-danger !px-2.5 !py-1.5 lg:!px-2 lg:!py-0.5" @click="onRemoveProduct(i)">✕</button>
               </template>
             </li>
           </ul>
